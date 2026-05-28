@@ -1,0 +1,8 @@
+telemesser:
+  username: "CHANGE_ME"
+  encryptPassword: "CHANGE_ME"
+
+salesforce:
+  username: "CHANGE_ME"
+  password: "CHANGE_ME"
+  securityToken: "CHANGE_ME"

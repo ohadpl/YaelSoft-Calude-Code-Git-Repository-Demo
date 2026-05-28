@@ -1,0 +1,14 @@
+target/
+.mule/
+.classpath
+.project
+.settings/
+*.class
+*.log
+
+# Nested duplicate folder (Anypoint Studio artifact)
+ClaudeCode-SB-SMS-Services/
+
+# OS
+.DS_Store
+Thumbs.db
