@@ -1,0 +1,84 @@
+#%RAML 1.0
+title: ohad-peled-Telemeser-SMS-API
+version: v1
+mediaType: application/json
+
+types:
+  BulkSMSRequest: !include /dataTypes/BulkSMSRequest.raml
+  SingleSMSRequest: !include /dataTypes/SingleSMSRequest.raml
+  SMSResponse: !include /dataTypes/SMSResponse.raml
+
+traits:
+  client-id-required:
+    headers:
+      client_id:
+        type: string
+      client_secret:
+        type: string
+    responses:
+      401:
+        description: Unauthorized. The client_id or client_secret are not valid or the client does not have access.
+      429:
+        description: The client used all of its request quota for the current period.
+      500:
+        description: An error occurred, see the specific message (Only if it is a WSDL endpoint).
+      503:
+        description: Contracts Information Unreachable.
+
+/sms:
+  /bulk:
+    is: [client-id-required]
+    post:
+      description: Send an SMS message to multiple recipients. Recipients are processed in batches of up to 1000 per Telemesser call. Invalid numbers are counted and reported in the warning response without failing the entire send.
+      body:
+        application/json:
+          type: BulkSMSRequest
+          examples:
+            input: !include /examples/BulkSMSRequestExample.raml
+      responses:
+        200:
+          body:
+            application/json:
+              type: SMSResponse
+              examples:
+                success: !include /examples/SMSSuccessResponseExample.raml
+                warning: !include /examples/SMSWarningResponseExample.raml
+                error: !include /examples/SMSErrorResponseExample.raml
+
+  /single:
+    is: [client-id-required]
+    post:
+      description: Send an SMS message to a single recipient. Unlike the bulk endpoint, this service explicitly validates the recipient phone number and returns a specific error if it is not valid.
+      body:
+        application/json:
+          type: SingleSMSRequest
+          examples:
+            input: !include /examples/SingleSMSRequestExample.raml
+      responses:
+        200:
+          body:
+            application/json:
+              type: SMSResponse
+              examples:
+                success: !include /examples/SMSSuccessResponseExample.raml
+                error: !include /examples/SMSErrorResponseExample.raml
+
+  /incoming:
+    get:
+      description: Callback endpoint called by Telemesser when a customer replies to an SMS sent from a virtual number. When the reply text is "1", a Salesforce Platform Event (SMSProviderEvent, type=RemovalFromDistribution) is created to unsubscribe the customer. For any other reply, the message is logged. Always returns HTTP 200 as required by Telemesser.
+      queryParameters:
+        sender:
+          type: string
+          required: true
+          description: The phone number of the customer who sent the reply message.
+        target:
+          type: string
+          required: true
+          description: The virtual number that received the reply (the original SMS sender number configured in Telemesser).
+        text:
+          type: string
+          required: true
+          description: "The reply message text sent by the customer. When equal to 1, triggers unsubscribe from Salesforce distribution list."
+      responses:
+        200:
+          description: Always returned to satisfy Telemesser callback requirements.

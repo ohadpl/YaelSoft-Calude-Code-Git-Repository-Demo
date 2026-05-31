@@ -1,0 +1,16 @@
+#%RAML 1.0 DataType
+type: object
+properties:
+  senderName?:
+    type: string
+    maxLength: 11
+    description: Sender name shown to recipient. Max 11 chars. English letters and !@#$%&*_ only (no spaces, no Hebrew). Must be pre-approved with Telemesser offline. Defaults to pre-configured default if omitted.
+  sendId?:
+    type: string
+    description: Campaign tracking identifier. Not required to be unique.
+  subscriber:
+    type: string
+    description: Single recipient phone number. Valid formats include 050-1112233, 0501112233, +972501112233, 97250111223.
+  message:
+    type: string
+    description: The SMS text content to send.

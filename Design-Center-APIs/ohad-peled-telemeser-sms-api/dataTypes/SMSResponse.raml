@@ -1,0 +1,10 @@
+#%RAML 1.0 DataType
+type: object
+properties:
+  status:
+    type: string
+    enum: [S, W, E]
+    description: "S = success (all sent), W = warning (some recipients invalid), E = error (call failed or recipient invalid)"
+  message:
+    type: string
+    description: "Empty string on success. Warning text on W. Error description on E."

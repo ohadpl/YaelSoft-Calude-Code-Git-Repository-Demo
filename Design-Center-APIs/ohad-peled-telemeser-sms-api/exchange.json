@@ -1,0 +1,14 @@
+{
+  "main": "ohad-peled-telemeser-sms-api.raml",
+  "name": "ohad-peled-Telemeser-SMS-API",
+  "classifier": "raml",
+  "tags": [],
+  "groupId": "190a90f6-e8e7-4652-973e-248a7deae5f6",
+  "assetId": "ohad-peled-telemeser-sms-api",
+  "version": "1.0.0",
+  "apiVersion": "v1",
+  "dependencies": [],
+  "organizationId": "190a90f6-e8e7-4652-973e-248a7deae5f6",
+  "originalFormatVersion": "1.0",
+  "descriptorVersion": "1.0.0"
+}
