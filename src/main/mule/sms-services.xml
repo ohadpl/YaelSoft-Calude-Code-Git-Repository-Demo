@@ -271,16 +271,16 @@ output application/json
                 <logger level="INFO" message="#['Opt-out processed - published SMSProviderEvent for sender: ' ++ vars.sender]" doc:name="Log Opt-Out Processed" doc:id="eed5edd8-74fd-4169-a6f9-9d5c2bdf57cf"/>
             </when>
             <otherwise>
-                <email:send config-ref="Email_SMTP_Config" doc:name="Send Removal Alert Email" doc:id="c4f2a1b8-9e3d-4c7a-b6f5-2a8d1e0f3c96">
+                <email:send config-ref="Email_SMTP_Config" subject="SMS Removal Request - Reply Not Confirmed" doc:name="Send Removal Alert Email" doc:id="c4f2a1b8-9e3d-4c7a-b6f5-2a8d1e0f3c96">
                     <email:to-addresses>
                         <email:to-address value="ohadp@yaelsoft.com"/>
                     </email:to-addresses>
                     <email:body>
-                        <email:content><![CDATA[#['Customer with phone number ' ++ vars.sender ++ ' requested removal from the SMS distribution list but replied "' ++ vars.text ++ '" instead of "1". Their removal request was NOT applied.']]]></email:content>
+                        <email:content><![CDATA[#['Customer with phone number ' ++ vars.sender ++ ' requested removal from the SMS distribution list but replied ' ++ vars.text ++ ' instead of 1. Their removal request was NOT applied.']]]></email:content>
+                        <email:contentType>text/plain</email:contentType>
                     </email:body>
-                    <email:subject value="SMS Removal Request - Reply Not Confirmed"/>
                 </email:send>
-                <logger level="INFO" message="#['Non-opt-out removal request - sender: ' ++ vars.sender ++ ' replied "' ++ vars.text ++ '" instead of "1". Alert email sent, removal NOT applied.']" doc:name="Log Removal Alert Sent" doc:id="eaae0338-4483-4a34-ae87-55c64bd1f75d"/>
+                <logger level="INFO" message="#['Non-opt-out removal request - sender: ' ++ vars.sender ++ ', replied: ' ++ vars.text ++ ' (not 1). Alert email sent, removal NOT applied.']" doc:name="Log Removal Alert Sent" doc:id="eaae0338-4483-4a34-ae87-55c64bd1f75d"/>
             </otherwise>
         </choice>
 
