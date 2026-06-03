@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+          http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="handle-returning-messages-flow-test" doc:id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"/>
+
+    <!--
+        Test 1: Opt-out with Text=1 — Salesforce publish-platform-event-message is mocked.
+        Asserts the HTTP response payload is "OK".
+    -->
+    <munit:test name="test-opt-out-with-1"
+                description="When Text=1 the Salesforce platform event is published and flow returns OK"
+                doc:id="b2c3d4e5-f6a7-8901-bcde-f12345678901">
+
+        <munit:behavior>
+            <!-- Mock the Salesforce publish-platform-event-message so no real SF call is made -->
+            <munit-tools:mock-when doc:name="Mock Salesforce Publish Platform Event" doc:id="c3d4e5f6-a7b8-9012-cdef-123456789012"
+                processor="salesforce:publish-platform-event-message">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Publish platform event message"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/java"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <flow-ref name="handle-returning-messages-flow" doc:name="Run handle-returning-messages-flow" doc:id="d4e5f6a7-b8c9-0123-defa-234567890123"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that doc:name="Assert response is OK" doc:id="e5f6a7b8-c9d0-1234-efab-345678901234"
+                expression="#[payload]"
+                is="#[MunitTools::equalTo('OK')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test 2: Non-opt-out with Text=2 — email:send is mocked.
+        Asserts the HTTP response payload is "OK".
+    -->
+    <munit:test name="test-non-opt-out-sends-email"
+                description="When Text=2 the alert email is sent (mocked) and flow returns OK"
+                doc:id="f6a7b8c9-d0e1-2345-fabc-456789012345">
+
+        <munit:behavior>
+            <!-- Mock email:send so no real SMTP connection is attempted -->
+            <munit-tools:mock-when doc:name="Mock Email Send" doc:id="a7b8c9d0-e1f2-3456-abcd-567890123456"
+                processor="email:send">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Send Removal Alert Email"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/java"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <!-- Set query params: Text=2, Sender=0501234567 -->
+            <set-variable variableName="sender" value="0501234567" doc:name="Set sender var" doc:id="b8c9d0e1-f2a3-4567-bcde-678901234567"/>
+            <set-variable variableName="text" value="2" doc:name="Set text var" doc:id="c9d0e1f2-a3b4-5678-cdef-789012345678"/>
+            <flow-ref name="handle-returning-messages-flow" doc:name="Run handle-returning-messages-flow" doc:id="d0e1f2a3-b4c5-6789-defa-890123456789"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that doc:name="Assert response is OK" doc:id="e1f2a3b4-c5d6-7890-efab-901234567890"
+                expression="#[payload]"
+                is="#[MunitTools::equalTo('OK')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test 3: Empty text — email:send is mocked.
+        Asserts the HTTP response payload is "OK".
+    -->
+    <munit:test name="test-empty-text"
+                description="When Text is empty the alert email is sent (mocked) and flow returns OK"
+                doc:id="f2a3b4c5-d6e7-8901-fabc-012345678901">
+
+        <munit:behavior>
+            <!-- Mock email:send so no real SMTP connection is attempted -->
+            <munit-tools:mock-when doc:name="Mock Email Send" doc:id="a3b4c5d6-e7f8-9012-abcd-123456789012"
+                processor="email:send">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Send Removal Alert Email"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]" mediaType="application/java"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <!-- Set query params: Text= (empty), Sender=0501234567 -->
+            <set-variable variableName="sender" value="0501234567" doc:name="Set sender var" doc:id="b4c5d6e7-f8a9-0123-bcde-234567890123"/>
+            <set-variable variableName="text" value="" doc:name="Set text var (empty)" doc:id="c5d6e7f8-a9b0-1234-cdef-345678901234"/>
+            <flow-ref name="handle-returning-messages-flow" doc:name="Run handle-returning-messages-flow" doc:id="d6e7f8a9-b0c1-2345-defa-456789012345"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that doc:name="Assert response is OK" doc:id="e7f8a9b0-c1d2-3456-efab-567890123456"
+                expression="#[payload]"
+                is="#[MunitTools::equalTo('OK')]"/>
+        </munit:validation>
+    </munit:test>
+
+</mule>

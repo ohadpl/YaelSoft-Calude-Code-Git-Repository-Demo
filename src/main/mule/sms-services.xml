@@ -4,16 +4,22 @@
       xmlns:http="http://www.mulesoft.org/schema/mule/http"
       xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
       xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:email="http://www.mulesoft.org/schema/mule/email"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
       xsi:schemaLocation="
           http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
           http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
           http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+          http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
 
     <!-- ==================== GLOBAL CONFIGURATION ==================== -->
 
     <configuration-properties file="config.yaml" doc:name="Configuration properties" doc:id="d2a7f76f-2ff9-4121-b139-afa8406aba4f"/>
+
+    <email:smtp-config name="Email_SMTP_Config" doc:name="Email SMTP Config" doc:id="b3c1e9a2-7f4d-4e8b-a521-3d9f6c2e1b05">
+        <email:smtp-connection host="${email.host}" port="${email.port}" user="${email.username}" password="${email.password}"/>
+    </email:smtp-config>
 
     <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="4cf8b18a-c6fc-4712-9787-f5781dc84ca1">
         <http:listener-connection host="0.0.0.0" port="8877"/>
@@ -265,7 +271,16 @@ output application/json
                 <logger level="INFO" message="#['Opt-out processed - published SMSProviderEvent for sender: ' ++ vars.sender]" doc:name="Log Opt-Out Processed" doc:id="eed5edd8-74fd-4169-a6f9-9d5c2bdf57cf"/>
             </when>
             <otherwise>
-                <logger level="DEBUG" message="#['Non-opt-out callback received (Text=' ++ vars.text ++ '), no action taken']" doc:name="Log No Action" doc:id="eaae0338-4483-4a34-ae87-55c64bd1f75d"/>
+                <email:send config-ref="Email_SMTP_Config" doc:name="Send Removal Alert Email" doc:id="c4f2a1b8-9e3d-4c7a-b6f5-2a8d1e0f3c96">
+                    <email:to-addresses>
+                        <email:to-address value="ohadp@yaelsoft.com"/>
+                    </email:to-addresses>
+                    <email:body>
+                        <email:content><![CDATA[#['Customer with phone number ' ++ vars.sender ++ ' requested removal from the SMS distribution list but replied "' ++ vars.text ++ '" instead of "1". Their removal request was NOT applied.']]]></email:content>
+                    </email:body>
+                    <email:subject value="SMS Removal Request - Reply Not Confirmed"/>
+                </email:send>
+                <logger level="INFO" message="#['Non-opt-out removal request - sender: ' ++ vars.sender ++ ' replied "' ++ vars.text ++ '" instead of "1". Alert email sent, removal NOT applied.']" doc:name="Log Removal Alert Sent" doc:id="eaae0338-4483-4a34-ae87-55c64bd1f75d"/>
             </otherwise>
         </choice>
 

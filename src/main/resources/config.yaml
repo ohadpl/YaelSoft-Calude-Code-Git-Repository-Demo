@@ -6,3 +6,9 @@ salesforce:
   username: "CHANGE_ME"
   password: "CHANGE_ME"
   securityToken: "CHANGE_ME"
+
+email:
+  host: ""
+  port: "587"
+  username: ""
+  password: ""
