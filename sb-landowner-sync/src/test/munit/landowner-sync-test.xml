@@ -23,7 +23,6 @@
     <munit:test name="health-flow-returns-OK"
                 doc:id="t-health-0001"
                 description="Health endpoint returns 200 OK payload">
-        <munit:behavior/>
         <munit:execution>
             <munit-tools:mock-when doc:name="mock listener" doc:id="t-health-mock-0001"
                                    processor="http:listener">
@@ -114,7 +113,7 @@
                     <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
                 </munit-tools:with-attributes>
                 <munit-tools:then-return>
-                    <munit-tools:payload value="#[output application/json --- { value: [ { registrationKey: 818, buildingCode: '7976', propertyKey: 'P1', project_code: 'PRJ-1024', righttype: 'חכירה', plot: '10' } ] }]"/>
+                    <munit-tools:payload value="#[output application/java ---{ value: [ { registrationKey: 818, buildingCode: '7976', propertyKey: 'P1', project_code: 'PRJ-1024', righttype: 'חכירה', plot: '10' } ] }]"/>
                 </munit-tools:then-return>
             </munit-tools:mock-when>
         </munit:behavior>
@@ -145,7 +144,7 @@
                     <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
                 </munit-tools:with-attributes>
                 <munit-tools:then-return>
-                    <munit-tools:payload value="#[output application/json --- { value: [ { id: 55021, businessPartnerId: 11, ownerspercent: 100, fromdate: '2024-01-01', toDate: null } ] }]"/>
+                    <munit-tools:payload value="#[output application/java ---{ value: [ { id: 55021, businessPartnerId: 11, ownerspercent: 100, fromdate: '2024-01-01', toDate: null } ] }]"/>
                 </munit-tools:then-return>
             </munit-tools:mock-when>
             <munit-tools:mock-when doc:name="mock BP" doc:id="t-build-mock-bp-0001"
@@ -154,7 +153,7 @@
                     <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Operation_HTTP_Request_config"/>
                 </munit-tools:with-attributes>
                 <munit-tools:then-return>
-                    <munit-tools:payload value="#[output application/json --- { value: [ { id: 11, buisnesspartnername: 'שיכון ובינוי', buisnesspartnerlegalidnumber: '520021171', buisnesspartneradress: 'הירדן 1א', idtype: 'ח.פ' } ] }]"/>
+                    <munit-tools:payload value="#[output application/java ---{ value: [ { id: 11, buisnesspartnername: 'שיכון ובינוי', buisnesspartnerlegalidnumber: '520021171', buisnesspartneradress: 'הירדן 1א', idtype: 'ח.פ' } ] }]"/>
                 </munit-tools:then-return>
             </munit-tools:mock-when>
         </munit:behavior>
@@ -193,7 +192,7 @@
                     <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
                 </munit-tools:with-attributes>
                 <munit-tools:then-return>
-                    <munit-tools:payload value="#[output application/json --- { value: [] }]"/>
+                    <munit-tools:payload value="#[output application/java ---{ value: [] }]"/>
                 </munit-tools:then-return>
             </munit-tools:mock-when>
         </munit:behavior>
@@ -309,7 +308,6 @@
     <munit:test name="upsert-landowners-empty-batch"
                 doc:id="t-up-0003"
                 description="Empty batch -> upsert not called">
-        <munit:behavior/>
         <munit:execution>
             <set-variable variableName="landownerBatch" value="#[[]]" doc:name="empty batch" doc:id="t-up-batch-empty-0001"/>
             <flow-ref name="upsert-landowners-subflow" doc:name="ref" doc:id="t-up-ref-0003"/>

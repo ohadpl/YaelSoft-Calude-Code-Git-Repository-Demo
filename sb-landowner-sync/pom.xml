@@ -17,9 +17,9 @@
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 
-		<app.runtime>4.6.0</app.runtime>
+		<app.runtime>4.11.4</app.runtime>
 		<mule.maven.plugin.version>4.9.1</mule.maven.plugin.version>
-		<munit.version>3.1.0</munit.version>
+		<munit.version>3.7.1</munit.version>
 
 		<!-- Connector versions -->
 		<mule.http.connector.version>1.10.6</mule.http.connector.version>
@@ -45,6 +45,14 @@
 				<groupId>com.mulesoft.munit.tools</groupId>
 				<artifactId>munit-maven-plugin</artifactId>
 				<version>${munit.version}</version>
+				<configuration>
+					<runtimeVersion>${app.runtime}</runtimeVersion>
+					<runtimeProduct>MULE_EE</runtimeProduct>
+					<systemPropertyVariables>
+						<!-- secure-config.yaml holds plaintext placeholders, so any key resolves -->
+						<secure.key>munit-local-test-key</secure.key>
+					</systemPropertyVariables>
+				</configuration>
 				<executions>
 					<execution>
 						<id>test</id>
@@ -104,6 +112,14 @@
 
 	<repositories>
 		<repository>
+			<id>central</id>
+			<name>Maven Central</name>
+			<url>https://repo1.maven.org/maven2</url>
+			<layout>default</layout>
+			<releases><enabled>true</enabled></releases>
+			<snapshots><enabled>false</enabled></snapshots>
+		</repository>
+		<repository>
 			<id>anypoint-exchange-v3</id>
 			<name>Anypoint Exchange V3</name>
 			<url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
@@ -118,6 +134,14 @@
 	</repositories>
 
 	<pluginRepositories>
+		<pluginRepository>
+			<id>central</id>
+			<name>Maven Central</name>
+			<url>https://repo1.maven.org/maven2</url>
+			<layout>default</layout>
+			<releases><enabled>true</enabled></releases>
+			<snapshots><enabled>false</enabled></snapshots>
+		</pluginRepository>
 		<pluginRepository>
 			<id>mulesoft-releases</id>
 			<name>MuleSoft Releases Repository</name>

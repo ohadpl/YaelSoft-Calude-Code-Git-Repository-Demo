@@ -154,7 +154,7 @@
         <set-variable variableName="allRegistrations" value="#[[]]" doc:name="init allRegistrations" doc:id="fetch-init-0001"/>
         <!-- relative path for the first page; subsequent pages use @odata.nextLink -->
         <set-variable variableName="nextPath"
-                      value="#['/registrations?$filter=isCurrentRegistration eq true']"
+                      value="#['/registrations?%24filter=isCurrentRegistration eq true']"
                       doc:name="init nextPath"
                       doc:id="fetch-init-path-0001"/>
 
@@ -226,7 +226,7 @@ output application/java
                               doc:name="GET owners"
                               doc:id="build-http-owners-0001"
                               config-ref="Rainbow_Analytics_HTTP_Request_config"
-                              path="#['/owners?$filter=toDate eq null and registrationKey eq ' ++ (vars.reg.registrationKey as String)]">
+                              path="#['/owners?%24filter=toDate eq null and registrationKey eq ' ++ (vars.reg.registrationKey as String)]">
                     <http:response-validator>
                         <http:success-status-code-validator values="200"/>
                     </http:response-validator>
@@ -269,7 +269,7 @@ output application/java
                                           doc:name="GET businessPartner"
                                           doc:id="build-http-bp-0001"
                                           config-ref="Rainbow_Operation_HTTP_Request_config"
-                                          path="#['/businessPartners?$filter=id eq ' ++ (vars.currentBpId as String)]">
+                                          path="#['/businessPartners?%24filter=id eq ' ++ (vars.currentBpId as String)]">
                                 <http:response-validator>
                                     <http:success-status-code-validator values="200"/>
                                 </http:response-validator>
