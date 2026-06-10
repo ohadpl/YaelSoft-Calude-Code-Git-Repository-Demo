@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Global default error handler                                 -->
+    <!--                                                              -->
+    <!-- Referenced by every flow via error-handler ref=.            -->
+    <!--                                                              -->
+    <!--   * SALESFORCE:CONNECTIVITY -> propagate (abort the run; the -->
+    <!--     next nightly run retries the whole set - upsert is       -->
+    <!--     idempotent on External_Key__c).                          -->
+    <!--   * ANY (uncaught)          -> propagate, logged at ERROR    -->
+    <!--     with the correlationId.                                  -->
+    <!--                                                              -->
+    <!-- Per-registration HTTP retries and per-record upsert item     -->
+    <!-- failures are handled locally (On Error Continue) inside the  -->
+    <!-- relevant sub-flows so the batch can continue.                -->
+    <!-- ============================================================ -->
+    <error-handler name="global-error-handler" doc:id="err-global-0001" doc:name="global-error-handler">
+
+        <on-error-propagate type="SALESFORCE:CONNECTIVITY"
+                            doc:name="On Error Propagate - SF connectivity"
+                            doc:id="err-sf-conn-0001"
+                            logException="true">
+            <logger level="ERROR"
+                    doc:name="Log SF connectivity error"
+                    doc:id="err-sf-conn-log-0001"
+                    message="#['FATAL landowner-sync - Salesforce connectivity error - aborting run. correlationId=' ++ (correlationId default '') ++ ' error=' ++ (error.description default '')]"/>
+        </on-error-propagate>
+
+        <on-error-propagate type="ANY"
+                            doc:name="On Error Propagate - ANY"
+                            doc:id="err-any-0001"
+                            logException="true">
+            <logger level="ERROR"
+                    doc:name="Log uncaught error"
+                    doc:id="err-any-log-0001"
+                    message="#['FATAL landowner-sync - uncaught error. correlationId=' ++ (correlationId default '') ++ ' type=' ++ (error.errorType.identifier default '') ++ ' description=' ++ (error.description default '')]"/>
+        </on-error-propagate>
+
+    </error-handler>
+
+</mule>

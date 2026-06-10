@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+          http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+    <munit:config name="landowner-sync-test.xml" doc:id="munit-cfg-0001">
+        <munit:parameterizations/>
+    </munit:config>
+
+    <!-- ============================================================ -->
+    <!-- health-flow - happy path                                     -->
+    <!-- ============================================================ -->
+    <munit:test name="health-flow-returns-OK"
+                doc:id="t-health-0001"
+                description="Health endpoint returns 200 OK payload">
+        <munit:behavior/>
+        <munit:execution>
+            <munit-tools:mock-when doc:name="mock listener" doc:id="t-health-mock-0001"
+                                   processor="http:listener">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="config-ref" whereValue="Health_HTTP_Listener_config"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[null]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <flow-ref name="health-flow" doc:name="health-flow" doc:id="t-health-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="payload == OK" doc:id="t-health-assert-0001"
+                                     expression="#[payload]"
+                                     is="#[MunitTools::equalTo('OK')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- delete-stale-landowners-subflow - records found              -->
+    <!-- ============================================================ -->
+    <munit:test name="delete-stale-deletes-when-records-found"
+                doc:id="t-del-0001"
+                description="When stale records exist, delete is called and deleteCount set">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock query" doc:id="t-del-mock-query-0001"
+                                   processor="salesforce:query">
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[{ Id: '001' }, { Id: '002' }]]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when doc:name="mock delete" doc:id="t-del-mock-del-0001"
+                                   processor="salesforce:delete">
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[{ successful: true, id: '001' }, { successful: true, id: '002' }]]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="delete-stale-landowners-subflow" doc:name="ref" doc:id="t-del-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="deleteCount == 2" doc:id="t-del-assert-0001"
+                                     expression="#[vars.deleteCount]"
+                                     is="#[MunitTools::equalTo(2)]"/>
+            <munit-tools:verify-call doc:name="delete called once" doc:id="t-del-verify-0001"
+                                     processor="salesforce:delete" times="1"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- delete-stale-landowners-subflow - no records (guard)         -->
+    <!-- ============================================================ -->
+    <munit:test name="delete-stale-skips-when-none"
+                doc:id="t-del-0002"
+                description="When no stale records, delete is NOT called and deleteCount=0">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock empty query" doc:id="t-del-mock-empty-0001"
+                                   processor="salesforce:query">
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[]]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="delete-stale-landowners-subflow" doc:name="ref" doc:id="t-del-ref-0002"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="deleteCount == 0" doc:id="t-del-assert-0002"
+                                     expression="#[vars.deleteCount]"
+                                     is="#[MunitTools::equalTo(0)]"/>
+            <munit-tools:verify-call doc:name="delete not called" doc:id="t-del-verify-0002"
+                                     processor="salesforce:delete" times="0"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- fetch-registrations-subflow - single page                    -->
+    <!-- ============================================================ -->
+    <munit:test name="fetch-registrations-single-page"
+                doc:id="t-fetch-0001"
+                description="Maps a single OData page (no nextLink) into vars.registrations">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock GET registrations" doc:id="t-fetch-mock-0001"
+                                   processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[output application/json --- { value: [ { registrationKey: 818, buildingCode: '7976', propertyKey: 'P1', project_code: 'PRJ-1024', righttype: 'חכירה', plot: '10' } ] }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <flow-ref name="fetch-registrations-subflow" doc:name="ref" doc:id="t-fetch-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="1 registration" doc:id="t-fetch-assert-size-0001"
+                                     expression="#[sizeOf(vars.registrations)]"
+                                     is="#[MunitTools::equalTo(1)]"/>
+            <munit-tools:assert-that doc:name="projectCode mapped" doc:id="t-fetch-assert-pc-0001"
+                                     expression="#[vars.registrations[0].projectCode]"
+                                     is="#[MunitTools::equalTo('PRJ-1024')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- build-landowners - happy path                                -->
+    <!-- ============================================================ -->
+    <munit:test name="build-landowners-happy-path"
+                doc:id="t-build-0001"
+                description="Builds flat LandOwner__c records with Project__r and Building__r">
+        <munit:behavior>
+            <!-- owners call (analytics) then businessPartners call (operation) -->
+            <munit-tools:mock-when doc:name="mock owners" doc:id="t-build-mock-owners-0001"
+                                   processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[output application/json --- { value: [ { id: 55021, businessPartnerId: 11, ownerspercent: 100, fromdate: '2024-01-01', toDate: null } ] }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <munit-tools:mock-when doc:name="mock BP" doc:id="t-build-mock-bp-0001"
+                                   processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Operation_HTTP_Request_config"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[output application/json --- { value: [ { id: 11, buisnesspartnername: 'שיכון ובינוי', buisnesspartnerlegalidnumber: '520021171', buisnesspartneradress: 'הירדן 1א', idtype: 'ח.פ' } ] }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-variable variableName="reg"
+                          value="#[{ registrationKey: 818, buildingCode: '7976', propertyKey: 'P1', projectCode: 'PRJ-1024', rightType: 'חכירה', plot: '10' }]"
+                          doc:name="set reg" doc:id="t-build-setreg-0001"/>
+            <flow-ref name="build-landowners-for-registration-subflow" doc:name="ref" doc:id="t-build-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="1 record" doc:id="t-build-assert-size-0001"
+                                     expression="#[sizeOf(payload)]"
+                                     is="#[MunitTools::equalTo(1)]"/>
+            <munit-tools:assert-that doc:name="External_Key__c is owner id" doc:id="t-build-assert-key-0001"
+                                     expression="#[payload[0].External_Key__c]"
+                                     is="#[MunitTools::equalTo('55021')]"/>
+            <munit-tools:assert-that doc:name="Project__r set" doc:id="t-build-assert-proj-0001"
+                                     expression="#[payload[0].Project__r.Project_Code__c]"
+                                     is="#[MunitTools::equalTo('PRJ-1024')]"/>
+            <munit-tools:assert-that doc:name="Building__r set" doc:id="t-build-assert-bldg-0001"
+                                     expression="#[payload[0].Building__r.BuildingCode__c]"
+                                     is="#[MunitTools::equalTo('7976')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- build-landowners - no owners -> []                           -->
+    <!-- ============================================================ -->
+    <munit:test name="build-landowners-no-owners-returns-empty"
+                doc:id="t-build-0002"
+                description="Registration with zero owners yields an empty list">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock empty owners" doc:id="t-build-mock-empty-0001"
+                                   processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[output application/json --- { value: [] }]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-variable variableName="reg"
+                          value="#[{ registrationKey: 999, buildingCode: null, projectCode: 'PRJ-9', rightType: 'x', plot: '1' }]"
+                          doc:name="set reg" doc:id="t-build-setreg-0002"/>
+            <flow-ref name="build-landowners-for-registration-subflow" doc:name="ref" doc:id="t-build-ref-0002"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="empty list" doc:id="t-build-assert-empty-0001"
+                                     expression="#[sizeOf(payload)]"
+                                     is="#[MunitTools::equalTo(0)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- build-landowners - Rainbow owners error -> [] (On Error Continue) -->
+    <!-- ============================================================ -->
+    <munit:test name="build-landowners-rainbow-error-continues"
+                doc:id="t-build-0003"
+                description="HTTP connectivity error on owners fetch is swallowed -> empty list">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock owners error" doc:id="t-build-mock-err-0001"
+                                   processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="config-ref" whereValue="Rainbow_Analytics_HTTP_Request_config"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="HTTP:CONNECTIVITY"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-variable variableName="reg"
+                          value="#[{ registrationKey: 777, buildingCode: null, projectCode: 'PRJ-7', rightType: 'x', plot: '1' }]"
+                          doc:name="set reg" doc:id="t-build-setreg-0003"/>
+            <flow-ref name="build-landowners-for-registration-subflow" doc:name="ref" doc:id="t-build-ref-0003"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="empty list on error" doc:id="t-build-assert-err-0001"
+                                     expression="#[sizeOf(payload default [])]"
+                                     is="#[MunitTools::equalTo(0)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- upsert-landowners - happy path                               -->
+    <!-- ============================================================ -->
+    <munit:test name="upsert-landowners-happy-path"
+                doc:id="t-up-0001"
+                description="Chunks and upserts; success count accumulated">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock upsert" doc:id="t-up-mock-0001"
+                                   processor="salesforce:upsert">
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[{ successful: true, externalId: '1' }, { successful: true, externalId: '2' }]]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-variable variableName="upsertCount" value="#[0]" doc:name="init" doc:id="t-up-init-0001"/>
+            <set-variable variableName="failedCount" value="#[0]" doc:name="init fail" doc:id="t-up-init-fail-0001"/>
+            <set-variable variableName="landownerBatch"
+                          value="#[[{ External_Key__c: '1', Name: 'A' }, { External_Key__c: '2', Name: 'B' }]]"
+                          doc:name="set batch" doc:id="t-up-batch-0001"/>
+            <flow-ref name="upsert-landowners-subflow" doc:name="ref" doc:id="t-up-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="upsertCount == 2" doc:id="t-up-assert-0001"
+                                     expression="#[vars.upsertCount]"
+                                     is="#[MunitTools::equalTo(2)]"/>
+            <munit-tools:verify-call doc:name="upsert called once" doc:id="t-up-verify-0001"
+                                     processor="salesforce:upsert" times="1"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- upsert-landowners - item failure logged                      -->
+    <!-- ============================================================ -->
+    <munit:test name="upsert-landowners-item-failure"
+                doc:id="t-up-0002"
+                description="Per-record failure increments failedCount and is logged">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock upsert partial" doc:id="t-up-mock-fail-0001"
+                                   processor="salesforce:upsert">
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[{ successful: true, externalId: '1' }, { successful: false, externalId: '2', errors: [{ message: 'INVALID_FIELD' }] }]]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-variable variableName="upsertCount" value="#[0]" doc:name="init" doc:id="t-up-init-0002"/>
+            <set-variable variableName="failedCount" value="#[0]" doc:name="init fail" doc:id="t-up-init-fail-0002"/>
+            <set-variable variableName="landownerBatch"
+                          value="#[[{ External_Key__c: '1', Name: 'A' }, { External_Key__c: '2', Name: 'B' }]]"
+                          doc:name="set batch" doc:id="t-up-batch-0002"/>
+            <flow-ref name="upsert-landowners-subflow" doc:name="ref" doc:id="t-up-ref-0002"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="upsertCount == 1" doc:id="t-up-assert-succ-0002"
+                                     expression="#[vars.upsertCount]"
+                                     is="#[MunitTools::equalTo(1)]"/>
+            <munit-tools:assert-that doc:name="failedCount == 1" doc:id="t-up-assert-fail-0002"
+                                     expression="#[vars.failedCount]"
+                                     is="#[MunitTools::equalTo(1)]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- upsert-landowners - empty batch (guard)                      -->
+    <!-- ============================================================ -->
+    <munit:test name="upsert-landowners-empty-batch"
+                doc:id="t-up-0003"
+                description="Empty batch -> upsert not called">
+        <munit:behavior/>
+        <munit:execution>
+            <set-variable variableName="landownerBatch" value="#[[]]" doc:name="empty batch" doc:id="t-up-batch-empty-0001"/>
+            <flow-ref name="upsert-landowners-subflow" doc:name="ref" doc:id="t-up-ref-0003"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:verify-call doc:name="upsert not called" doc:id="t-up-verify-0003"
+                                     processor="salesforce:upsert" times="0"/>
+        </munit:validation>
+    </munit:test>
+
+</mule>

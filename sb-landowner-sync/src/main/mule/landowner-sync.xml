@@ -1,0 +1,399 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Health flow                                                  -->
+    <!-- ============================================================ -->
+    <flow name="health-flow" doc:id="flow-health-0001">
+        <http:listener doc:name="GET /health"
+                       doc:id="health-listener-0001"
+                       config-ref="Health_HTTP_Listener_config"
+                       path="/health"
+                       allowedMethods="GET"/>
+        <set-payload value="#['OK']"
+                     doc:name="Set OK"
+                     doc:id="health-payload-0001"
+                     mimeType="text/plain"/>
+        <error-handler ref="global-error-handler"/>
+    </flow>
+
+    <!-- ============================================================ -->
+    <!-- 4.1 Main scheduler flow                                      -->
+    <!-- ============================================================ -->
+    <flow name="landowner-sync-scheduler-flow" doc:id="sched-main-0001">
+        <scheduler doc:name="Nightly scheduler" doc:id="sched-trigger-0001">
+            <scheduling-strategy>
+                <cron expression="${sync.cron}" timeZone="Asia/Jerusalem"/>
+            </scheduling-strategy>
+        </scheduler>
+
+        <logger level="INFO"
+                doc:name="Log START"
+                doc:id="sched-log-start-0001"
+                message="#['START landowner-sync correlationId=' ++ (correlationId default '')]"/>
+
+        <!-- init counters -->
+        <set-variable variableName="deleteCount" value="#[0]" doc:name="init deleteCount" doc:id="sched-init-del-0001"/>
+        <set-variable variableName="upsertCount" value="#[0]" doc:name="init upsertCount" doc:id="sched-init-up-0001"/>
+        <set-variable variableName="failedCount" value="#[0]" doc:name="init failedCount" doc:id="sched-init-fail-0001"/>
+        <set-variable variableName="skippedCount" value="#[0]" doc:name="init skippedCount" doc:id="sched-init-skip-0001"/>
+        <set-variable variableName="landownerBatch" value="#[[]]" doc:name="init landownerBatch" doc:id="sched-init-batch-0001"/>
+
+        <!-- 2. Purge stale records -->
+        <flow-ref name="delete-stale-landowners-subflow" doc:name="delete-stale-landowners-subflow" doc:id="sched-ref-delete-0001"/>
+
+        <!-- 3. Fetch current registrations -->
+        <flow-ref name="fetch-registrations-subflow" doc:name="fetch-registrations-subflow" doc:id="sched-ref-fetch-0001"/>
+
+        <logger level="INFO"
+                doc:name="Log fetched count"
+                doc:id="sched-log-fetched-0001"
+                message="#['Fetched ' ++ (sizeOf(vars.registrations default []) as String) ++ ' current registrations']"/>
+
+        <!-- 4. Iterate registrations -->
+        <foreach collection="#[vars.registrations default []]"
+                 doc:name="For Each registration"
+                 doc:id="sched-foreach-0001">
+            <set-variable variableName="reg" value="#[payload]" doc:name="set reg" doc:id="sched-set-reg-0001"/>
+
+            <flow-ref name="build-landowners-for-registration-subflow"
+                      doc:name="build-landowners-for-registration-subflow"
+                      doc:id="sched-ref-build-0001"/>
+
+            <!-- 4b. Accumulate built records (payload is a list of LandOwner__c maps, possibly empty) -->
+            <choice doc:name="If owners built" doc:id="sched-choice-acc-0001">
+                <when expression="#[(payload != null) and (sizeOf(payload default []) > 0)]">
+                    <set-variable variableName="landownerBatch"
+                                  value="#[(vars.landownerBatch default []) ++ (payload default [])]"
+                                  doc:name="accumulate batch"
+                                  doc:id="sched-acc-0001"/>
+                </when>
+                <otherwise>
+                    <set-variable variableName="skippedCount"
+                                  value="#[(vars.skippedCount default 0) + 1]"
+                                  doc:name="increment skipped"
+                                  doc:id="sched-skip-inc-0001"/>
+                    <logger level="DEBUG"
+                            doc:name="Log skipped"
+                            doc:id="sched-log-skip-0001"
+                            message="#['Skipping registrationKey=' ++ (vars.reg.registrationKey default '') ++ ' - no owners']"/>
+                </otherwise>
+            </choice>
+        </foreach>
+
+        <!-- 5. Filter empties (defensive - empty registrations already excluded above) -->
+        <set-variable variableName="landownerBatch"
+                      value="#[(vars.landownerBatch default []) filter ((rec) -> not isEmpty(rec))]"
+                      doc:name="filter empties"
+                      doc:id="sched-filter-0001"/>
+
+        <!-- 6. Upsert to Salesforce -->
+        <flow-ref name="upsert-landowners-subflow" doc:name="upsert-landowners-subflow" doc:id="sched-ref-upsert-0001"/>
+
+        <!-- 7. Log summary -->
+        <logger level="INFO"
+                doc:name="Log END"
+                doc:id="sched-log-end-0001"
+                message="#['END landowner-sync upserted=' ++ (vars.upsertCount default 0 as String) ++ ' deleted=' ++ (vars.deleteCount default 0 as String) ++ ' failed=' ++ (vars.failedCount default 0 as String) ++ ' skipped=' ++ (vars.skippedCount default 0 as String)]"/>
+
+        <error-handler ref="global-error-handler"/>
+    </flow>
+
+    <!-- ============================================================ -->
+    <!-- 4.2 delete-stale-landowners-subflow                          -->
+    <!-- ============================================================ -->
+    <sub-flow name="delete-stale-landowners-subflow" doc:id="sub-delete-0002">
+        <salesforce:query doc:name="Query stale LandOwner__c"
+                          doc:id="del-query-0001"
+                          config-ref="Salesforce_Config">
+            <salesforce:salesforce-query>SELECT Id FROM LandOwner__c WHERE ToDate__c != null AND ToDate__c &lt; TODAY AND Lawyer__c = null</salesforce:salesforce-query>
+        </salesforce:query>
+
+        <set-variable variableName="staleIds"
+                      value="#[(payload default []) map ((r) -> { Id: r.Id })]"
+                      doc:name="collect stale ids"
+                      doc:id="del-collect-0001"/>
+
+        <choice doc:name="If stale records exist" doc:id="del-choice-0001">
+            <when expression="#[sizeOf(vars.staleIds default []) > 0]">
+                <salesforce:delete doc:name="Delete stale records"
+                                   doc:id="del-delete-0001"
+                                   config-ref="Salesforce_Config">
+                    <salesforce:ids><![CDATA[#[(vars.staleIds default []) map ((r) -> r.Id)]]]></salesforce:ids>
+                </salesforce:delete>
+                <set-variable variableName="deleteCount"
+                              value="#[sizeOf(vars.staleIds default [])]"
+                              doc:name="set deleteCount"
+                              doc:id="del-count-0001"/>
+            </when>
+            <otherwise>
+                <set-variable variableName="deleteCount" value="#[0]" doc:name="deleteCount=0" doc:id="del-count-zero-0001"/>
+            </otherwise>
+        </choice>
+
+        <logger level="INFO"
+                doc:name="Log purge"
+                doc:id="del-log-0001"
+                message="#['Deleted ' ++ (vars.deleteCount default 0 as String) ++ ' stale LandOwner__c records']"/>
+    </sub-flow>
+
+    <!-- ============================================================ -->
+    <!-- 4.3 fetch-registrations-subflow                              -->
+    <!-- ============================================================ -->
+    <sub-flow name="fetch-registrations-subflow" doc:id="sub-fetch-reg-0003">
+        <set-variable variableName="allRegistrations" value="#[[]]" doc:name="init allRegistrations" doc:id="fetch-init-0001"/>
+        <!-- relative path for the first page; subsequent pages use @odata.nextLink -->
+        <set-variable variableName="nextPath"
+                      value="#['/registrations?$filter=isCurrentRegistration eq true']"
+                      doc:name="init nextPath"
+                      doc:id="fetch-init-path-0001"/>
+
+        <!-- Page through OData results following @odata.nextLink.            -->
+        <!-- Mule has no while-loop; iterate a bounded page range (1000 max)  -->
+        <!-- and short-circuit via the choice guard once nextPath is null.    -->
+        <foreach collection="#[1 to 1000]"
+                 doc:name="paging loop"
+                 doc:id="fetch-pageloop-0001">
+            <choice doc:name="more pages?" doc:id="fetch-more-0001">
+                <when expression="#[vars.nextPath != null]">
+                    <http:request method="GET"
+                                  doc:name="GET registrations page"
+                                  doc:id="fetch-http-0001"
+                                  config-ref="Rainbow_Analytics_HTTP_Request_config"
+                                  path="#[vars.nextPath]">
+                        <http:response-validator>
+                            <http:success-status-code-validator values="200"/>
+                        </http:response-validator>
+                    </http:request>
+
+                    <ee:transform doc:name="accumulate page" doc:id="fetch-acc-0001">
+                        <ee:variables>
+                            <ee:set-variable variableName="allRegistrations"><![CDATA[%dw 2.0
+output application/java
+---
+(vars.allRegistrations default []) ++ (payload.value default [])]]></ee:set-variable>
+                            <ee:set-variable variableName="nextPath"><![CDATA[%dw 2.0
+output application/java
+---
+payload."@odata.nextLink" default null]]></ee:set-variable>
+                        </ee:variables>
+                    </ee:transform>
+                </when>
+                <otherwise>
+                    <logger level="DEBUG" doc:name="no more pages" doc:id="fetch-nomore-0001"
+                            message="paging complete"/>
+                </otherwise>
+            </choice>
+        </foreach>
+
+        <!-- Map registrations to slim shape (see dwl/map-registrations.dwl) -->
+        <ee:transform doc:name="map registrations" doc:id="fetch-map-0001">
+            <ee:variables>
+                <ee:set-variable variableName="registrations"><![CDATA[%dw 2.0
+output application/java
+---
+(vars.allRegistrations default []) map ((reg) -> {
+    registrationKey: reg.registrationKey,
+    buildingCode:    reg.buildingCode,
+    propertyKey:     reg.propertyKey,
+    projectCode:     reg.project_code,
+    rightType:       reg.righttype,
+    plot:            reg.plot
+})]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+    </sub-flow>
+
+    <!-- ============================================================ -->
+    <!-- 4.4 build-landowners-for-registration-subflow                -->
+    <!-- ============================================================ -->
+    <sub-flow name="build-landowners-for-registration-subflow" doc:id="sub-build-0004">
+
+        <!-- 1. Fetch owners (with retry + per-registration On Error Continue) -->
+        <try doc:name="fetch owners" doc:id="build-try-owners-0001">
+            <until-successful maxRetries="3" millisBetweenRetries="2000" doc:name="retry owners x3" doc:id="build-retry-owners-0001">
+                <http:request method="GET"
+                              doc:name="GET owners"
+                              doc:id="build-http-owners-0001"
+                              config-ref="Rainbow_Analytics_HTTP_Request_config"
+                              path="#['/owners?$filter=toDate eq null and registrationKey eq ' ++ (vars.reg.registrationKey as String)]">
+                    <http:response-validator>
+                        <http:success-status-code-validator values="200"/>
+                    </http:response-validator>
+                </http:request>
+            </until-successful>
+            <set-variable variableName="owners"
+                          value="#[payload.value default []]"
+                          doc:name="set owners"
+                          doc:id="build-set-owners-0001"/>
+            <error-handler>
+                <on-error-continue type="HTTP:CONNECTIVITY, HTTP:TIMEOUT, HTTP:RETRY_EXHAUSTED, EXPRESSION"
+                                   doc:name="On Error Continue - owners fetch"
+                                   doc:id="build-oec-owners-0001"
+                                   logException="true">
+                    <logger level="WARN"
+                            doc:name="Log owners fetch failed"
+                            doc:id="build-log-owners-fail-0001"
+                            message="#['Rainbow fetch failed registrationKey=' ++ (vars.reg.registrationKey default '') ++ ': ' ++ (error.description default '')]"/>
+                    <set-variable variableName="owners" value="#[[]]" doc:name="owners=[]" doc:id="build-owners-empty-0001"/>
+                </on-error-continue>
+            </error-handler>
+        </try>
+
+        <!-- 2. Skip if no owners -> return [] -->
+        <choice doc:name="Any owners?" doc:id="build-choice-owners-0001">
+            <when expression="#[sizeOf(vars.owners default []) > 0]">
+
+                <!-- 3. Enrich each owner with its business partner -->
+                <set-variable variableName="businessPartners" value="#[{}]" doc:name="init bp map" doc:id="build-init-bp-0001"/>
+                <foreach collection="#[vars.owners default []]"
+                         doc:name="For Each owner -> BP"
+                         doc:id="build-foreach-bp-0001">
+                    <set-variable variableName="currentBpId"
+                                  value="#[payload.businessPartnerId]"
+                                  doc:name="set currentBpId"
+                                  doc:id="build-set-bpid-0001"/>
+                    <try doc:name="fetch BP" doc:id="build-try-bp-0001">
+                        <until-successful maxRetries="3" millisBetweenRetries="2000" doc:name="retry BP x3" doc:id="build-retry-bp-0001">
+                            <http:request method="GET"
+                                          doc:name="GET businessPartner"
+                                          doc:id="build-http-bp-0001"
+                                          config-ref="Rainbow_Operation_HTTP_Request_config"
+                                          path="#['/businessPartners?$filter=id eq ' ++ (vars.currentBpId as String)]">
+                                <http:response-validator>
+                                    <http:success-status-code-validator values="200"/>
+                                </http:response-validator>
+                            </http:request>
+                        </until-successful>
+                        <set-variable variableName="businessPartners"
+                                      value="#[(vars.businessPartners default {}) ++ { (vars.currentBpId as String): ((payload.value default [])[0] default {}) }]"
+                                      doc:name="add BP to map"
+                                      doc:id="build-add-bp-0001"/>
+                        <error-handler>
+                            <on-error-continue type="HTTP:CONNECTIVITY, HTTP:TIMEOUT, HTTP:RETRY_EXHAUSTED, EXPRESSION"
+                                               doc:name="On Error Continue - BP fetch"
+                                               doc:id="build-oec-bp-0001"
+                                               logException="true">
+                                <logger level="WARN"
+                                        doc:name="Log BP fetch failed"
+                                        doc:id="build-log-bp-fail-0001"
+                                        message="#['Rainbow fetch failed registrationKey=' ++ (vars.reg.registrationKey default '') ++ ' businessPartnerId=' ++ (vars.currentBpId default '') ++ ': ' ++ (error.description default '')]"/>
+                                <!-- keep an empty BP so the owner is still built with whatever data exists -->
+                                <set-variable variableName="businessPartners"
+                                              value="#[(vars.businessPartners default {}) ++ { (vars.currentBpId as String): {} }]"
+                                              doc:name="add empty BP"
+                                              doc:id="build-add-empty-bp-0001"/>
+                            </on-error-continue>
+                        </error-handler>
+                    </try>
+                </foreach>
+
+                <!-- 4. Build flat records -->
+                <ee:transform doc:name="build flat LandOwner__c" doc:id="build-transform-0001">
+                    <ee:message>
+                        <ee:set-payload resource="dwl/build-landowner.dwl"/>
+                    </ee:message>
+                </ee:transform>
+
+                <!-- 5. Conditional Building lookup -->
+                <ee:transform doc:name="add building lookup" doc:id="build-building-0001">
+                    <ee:message>
+                        <ee:set-payload resource="dwl/add-building-lookup.dwl"/>
+                    </ee:message>
+                </ee:transform>
+
+            </when>
+            <otherwise>
+                <set-payload value="#[[]]" doc:name="return []" doc:id="build-return-empty-0001"/>
+            </otherwise>
+        </choice>
+    </sub-flow>
+
+    <!-- ============================================================ -->
+    <!-- 4.5 upsert-landowners-subflow                                -->
+    <!-- ============================================================ -->
+    <sub-flow name="upsert-landowners-subflow" doc:id="sub-upsert-0005">
+        <choice doc:name="Any records to upsert?" doc:id="up-choice-0001">
+            <when expression="#[sizeOf(vars.landownerBatch default []) > 0]">
+
+                <!-- 1. Chunk by salesforce.batchSize -->
+                <ee:transform doc:name="chunk batch" doc:id="up-chunk-0001">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+import divideBy from dw::core::Arrays
+---
+(vars.landownerBatch default []) divideBy (p('salesforce.batchSize') as Number)]]></ee:set-payload>
+                    </ee:message>
+                </ee:transform>
+
+                <!-- iterate chunks -->
+                <foreach collection="#[payload]" doc:name="For Each chunk" doc:id="up-foreach-0001">
+                    <try doc:name="upsert chunk" doc:id="up-try-0001">
+                        <salesforce:upsert doc:name="Upsert LandOwner__c"
+                                           doc:id="up-upsert-0001"
+                                           config-ref="Salesforce_Config"
+                                           externalIdFieldName="External_Key__c"
+                                           objectType="LandOwner__c">
+                            <salesforce:records><![CDATA[#[payload]]]></salesforce:records>
+                        </salesforce:upsert>
+
+                        <!-- 3. Collect results: count successes, log item failures -->
+                        <set-variable variableName="upsertCount"
+                                      value="#[(vars.upsertCount default 0) + (sizeOf((payload default []) filter ((r) -> (r.successful default r.success default false) == true)))]"
+                                      doc:name="add success count"
+                                      doc:id="up-success-0001"/>
+
+                        <set-variable variableName="failedCount"
+                                      value="#[(vars.failedCount default 0) + (sizeOf((payload default []) filter ((r) -> (r.successful default r.success default false) != true)))]"
+                                      doc:name="add failed count"
+                                      doc:id="up-failed-0001"/>
+
+                        <foreach collection="#[(payload default []) filter ((r) -> (r.successful default r.success default false) != true)]"
+                                 doc:name="For Each failure"
+                                 doc:id="up-foreach-fail-0001">
+                            <logger level="WARN"
+                                    doc:name="Log upsert failure"
+                                    doc:id="up-log-fail-0001"
+                                    message="#['Upsert failed externalKey=' ++ (payload.externalId default payload.id default '') ++ ': ' ++ (write((payload.errors default payload.statusCode default []), 'application/json') default '')]"/>
+                        </foreach>
+
+                        <error-handler>
+                            <on-error-continue type="SALESFORCE:INVALID_INPUT, SALESFORCE:INVALID_RESPONSE, SALESFORCE:FAULTY_RESPONSE, SALESFORCE:LIMIT_EXCEEDED, SALESFORCE:NOT_FOUND, EXPRESSION"
+                                               doc:name="On Error Continue - upsert chunk"
+                                               doc:id="up-oec-0001"
+                                               logException="true">
+                                <logger level="WARN"
+                                        doc:name="Log chunk upsert error"
+                                        doc:id="up-log-chunk-fail-0001"
+                                        message="#['Upsert chunk failed: ' ++ (error.description default '') ++ ' - chunk size=' ++ (sizeOf(payload default []) as String)]"/>
+                                <set-variable variableName="failedCount"
+                                              value="#[(vars.failedCount default 0) + sizeOf(payload default [])]"
+                                              doc:name="add chunk failures"
+                                              doc:id="up-add-chunk-fail-0001"/>
+                            </on-error-continue>
+                        </error-handler>
+                    </try>
+                </foreach>
+
+            </when>
+            <otherwise>
+                <logger level="INFO"
+                        doc:name="Nothing to upsert"
+                        doc:id="up-nothing-0001"
+                        message="No LandOwner__c records to upsert"/>
+            </otherwise>
+        </choice>
+    </sub-flow>
+
+</mule>

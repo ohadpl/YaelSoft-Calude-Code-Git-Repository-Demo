@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+          http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Configuration properties                                     -->
+    <!-- ============================================================ -->
+    <configuration-properties doc:name="Non-secure properties"
+                              doc:id="cfg-props-0001"
+                              file="config.yaml"/>
+
+    <secure-properties:config name="Secure_Properties_Config"
+                              doc:name="Secure Properties Config"
+                              doc:id="cfg-secure-0001"
+                              file="secure-config.yaml"
+                              key="${secure.key}">
+        <secure-properties:encrypt algorithm="AES" mode="CBC"/>
+    </secure-properties:config>
+
+    <!-- ============================================================ -->
+    <!-- Rainbow Analytics OData - HTTP Request config                -->
+    <!-- ============================================================ -->
+    <http:request-config name="Rainbow_Analytics_HTTP_Request_config"
+                         doc:name="Rainbow Analytics HTTP Request config"
+                         doc:id="cfg-http-analytics-0001"
+                         basePath="/api/analytics/odata"
+                         responseTimeout="${rainbow.timeout.ms}">
+        <http:request-connection host="${rainbow.analytics.host}"
+                                 protocol="HTTPS"
+                                 port="443">
+            <http:authentication>
+                <http:basic-authentication username="${rainbow.username}"
+                                           password="${secure::rainbow.password}"/>
+            </http:authentication>
+        </http:request-connection>
+    </http:request-config>
+
+    <!-- ============================================================ -->
+    <!-- Rainbow Operation OData - HTTP Request config                -->
+    <!-- ============================================================ -->
+    <http:request-config name="Rainbow_Operation_HTTP_Request_config"
+                         doc:name="Rainbow Operation HTTP Request config"
+                         doc:id="cfg-http-operation-0001"
+                         basePath="/api/operation/odata"
+                         responseTimeout="${rainbow.timeout.ms}">
+        <http:request-connection host="${rainbow.operation.host}"
+                                 protocol="HTTPS"
+                                 port="443">
+            <http:authentication>
+                <http:basic-authentication username="${rainbow.username}"
+                                           password="${secure::rainbow.password}"/>
+            </http:authentication>
+        </http:request-connection>
+    </http:request-config>
+
+    <!-- ============================================================ -->
+    <!-- Salesforce config                                            -->
+    <!-- ============================================================ -->
+    <salesforce:sfdc-config name="Salesforce_Config"
+                            doc:name="Salesforce Config"
+                            doc:id="cfg-sfdc-0001">
+        <salesforce:basic-connection username="${salesforce.username}"
+                                     password="${secure::salesforce.password}"
+                                     securityToken="${secure::salesforce.securityToken}"/>
+    </salesforce:sfdc-config>
+
+    <!-- ============================================================ -->
+    <!-- Health HTTP listener config                                  -->
+    <!-- ============================================================ -->
+    <http:listener-config name="Health_HTTP_Listener_config"
+                          doc:name="Health HTTP Listener config"
+                          doc:id="cfg-http-listener-0001">
+        <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+    </http:listener-config>
+
+</mule>

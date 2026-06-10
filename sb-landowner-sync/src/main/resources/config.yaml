@@ -1,0 +1,28 @@
+# =====================================================================
+# sb-landowner-sync - Non-secure configuration properties
+# =====================================================================
+# Secure values (rainbow.password, salesforce.password,
+# salesforce.securityToken) live in secure-config.yaml and are
+# encrypted with the Mule Secure Configuration Properties module.
+# =====================================================================
+
+http:
+  port: "8081"
+
+sync:
+  # Cron: 02:00 daily, evaluated in Asia/Jerusalem timezone
+  cron: "0 0 2 * * ?"
+
+rainbow:
+  analytics:
+    host: "ziv-rainbow.net"
+  operation:
+    host: "ziv-rainbow.net"
+  username: "CHANGE_ME"
+  timeout:
+    ms: "30000"
+
+salesforce:
+  username: "CHANGE_ME"
+  apiVersion: "59.0"
+  batchSize: "200"

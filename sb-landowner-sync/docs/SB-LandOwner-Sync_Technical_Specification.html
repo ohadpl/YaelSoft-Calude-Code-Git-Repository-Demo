@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>SB-LandOwner-Sync Project — Technical Specification</title>
+<style>
+body { font-family: Calibri, Arial, sans-serif; font-size: 13px; color: #222; margin: 60px 80px; line-height: 1.7; }
+h1 { font-size: 26px; color: #1a3a5c; border-bottom: 3px solid #1a3a5c; padding-bottom: 8px; margin-bottom: 4px; }
+h2 { font-size: 17px; color: #1a3a5c; margin-top: 32px; border-left: 4px solid #1a3a5c; padding-left: 10px; }
+h3 { font-size: 14px; color: #333; margin-top: 20px; }
+.meta { color: #666; font-size: 12px; margin-bottom: 32px; }
+table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+th { background: #1a3a5c; color: #fff; padding: 8px 12px; text-align: left; font-size: 12px; }
+td { border: 1px solid #ccc; padding: 8px 12px; vertical-align: top; font-size: 12px; }
+tr:nth-child(even) td { background: #f5f7fa; }
+code { background: #f0f0f0; border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px; font-family: Consolas, monospace; font-size: 11px; color: #c0392b; }
+pre { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 16px 20px; font-family: Consolas, monospace; font-size: 11px; overflow-x: auto; line-height: 1.5; }
+.keyword { color: #569cd6; } .string { color: #ce9178; } .comment { color: #6a9955; } .attr { color: #9cdcfe; } .tag { color: #4ec9b0; }
+.section-box { background: #f5f7fa; border: 1px solid #dde3ec; border-radius: 6px; padding: 16px 20px; margin-top: 12px; }
+.flow-step { display: flex; align-items: flex-start; margin: 10px 0; }
+.step-num { background: #1a3a5c; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; flex-shrink: 0; margin-right: 12px; margin-top: 2px; }
+ul { margin: 8px 0 8px 20px; } li { margin-bottom: 4px; }
+.badge { display: inline-block; background: #e8f0fe; color: #1a3a5c; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; }
+.badge-green { background: #e6f4ea; color: #1e6e34; } .badge-orange { background: #fff3e0; color: #b45309; }
+.footer { margin-top: 60px; font-size: 11px; color: #999; border-top: 1px solid #ddd; padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>SB-LandOwner-Sync Project — Technical Specification</h1>
+<div class="meta">
+  Document type: Technical Specification &nbsp;|&nbsp;
+  Project: SB-LandOwner-Sync &nbsp;|&nbsp;
+  Version: 1.0.0 &nbsp;|&nbsp;
+  Date: June 2026 &nbsp;|&nbsp;
+  Platform: MuleSoft Anypoint Platform 4.6.0 &nbsp;|&nbsp;
+  <span class="badge badge-orange">Proposed Design</span> &nbsp;|&nbsp;
+  Source: business-requirements.pdf
+</div>
+
+<h2>Overview</h2>
+<p>
+This integration synchronises <strong>land-rights owner</strong> data from <strong>Shikun &amp; Binui's Rainbow</strong> system into <strong>Salesforce</strong>. The business need is to produce a "warning note" (הערת אזהרה), which requires an accurate, up-to-date list of who holds rights in a parcel of land and what share each holds.
+</p>
+<p>
+Data originates from the Rainbow <code>registrations</code>, <code>owners</code> and <code>businessPartners</code> OData entities (database 262) and is written into the Salesforce custom object <code>LandOwner__c</code>. Per the business decision, records are <strong>not</strong> linked to a Salesforce <code>Account</code> and no <code>Project</code> is created — because Rainbow data is not always consistent and identifiers are sometimes missing, the information is written as a <strong>flat record</strong> directly into the "Land Owners" table via <strong>upsert</strong>. The integration runs as an unattended <strong>nightly batch</strong>.
+</p>
+
+<h2>1. Project Overview</h2>
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Maven Group ID</td><td><code>com.shikunbinui.integration</code> <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Maven Artifact ID</td><td><code>sb-landowner-sync</code> <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Version</td><td><code>1.0.0</code> <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Packaging</td><td><code>mule-application</code></td></tr>
+<tr><td>Mule Runtime</td><td>4.6.0 <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Mule Maven Plugin</td><td>4.3.0 <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Java Version</td><td>17 <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>HTTP Port</td><td>8081 (health/ops only — no public API) <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Flow definition file(s)</td><td><code>src/main/mule/landowner-sync.xml</code>, <code>src/main/mule/global-config.xml</code>, <code>src/main/mule/error-handling.xml</code></td></tr>
+</table>
+
+<h2>2. Connector Dependencies</h2>
+<table>
+<tr><th>Connector</th><th>Group ID</th><th>Version</th><th>Purpose</th></tr>
+<tr><td><code>mule-http-connector</code></td><td><code>org.mule.connectors</code></td><td>1.10.3 <span class="badge badge-orange">Proposed</span></td><td>Outbound HTTP/OData requests to Rainbow; inbound health listener</td></tr>
+<tr><td><code>mule-salesforce-connector</code></td><td><code>com.mulesoft.connectors</code></td><td>11.1.0 <span class="badge badge-orange">Proposed</span></td><td>Salesforce <code>LandOwner__c</code> query, upsert and delete</td></tr>
+<tr><td><code>mule-sockets-connector</code></td><td><code>org.mule.connectors</code></td><td>1.2.5 <span class="badge badge-orange">Proposed</span></td><td>Low-level socket support (HTTP connector runtime dependency)</td></tr>
+</table>
+
+<h2>3. Global Configurations</h2>
+
+<h3>3.1 HTTP Request — <code>Rainbow_Analytics_HTTP_Request_config</code></h3>
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Base path host</td><td><code>${rainbow.analytics.host}</code> (e.g. <code>ziv-rainbow.net</code>)</td></tr>
+<tr><td>Base path</td><td><code>/api/analytics/odata</code></td></tr>
+<tr><td>Protocol</td><td>HTTPS</td></tr>
+<tr><td>Port</td><td>443</td></tr>
+<tr><td>Connection Timeout</td><td><code>${rainbow.timeout.ms}</code> (default 30000)</td></tr>
+<tr><td>Authentication</td><td>HTTP Basic — <code>${rainbow.username}</code> / <code>${rainbow.password}</code> (secure)</td></tr>
+</table>
+
+<h3>3.2 HTTP Request — <code>Rainbow_Operation_HTTP_Request_config</code></h3>
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Base path host</td><td><code>${rainbow.operation.host}</code> (e.g. <code>ziv-rainbow.net</code>)</td></tr>
+<tr><td>Base path</td><td><code>/api/operation/odata</code></td></tr>
+<tr><td>Protocol</td><td>HTTPS</td></tr>
+<tr><td>Port</td><td>443</td></tr>
+<tr><td>Authentication</td><td>HTTP Basic — <code>${rainbow.username}</code> / <code>${rainbow.password}</code> (secure)</td></tr>
+</table>
+
+<h3>3.3 Salesforce — <code>Salesforce_Config</code></h3>
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Auth type</td><td>Basic (Username/Password + Security Token) <span class="badge badge-orange">Proposed</span></td></tr>
+<tr><td>Username</td><td><code>${salesforce.username}</code></td></tr>
+<tr><td>Password</td><td><code>${salesforce.password}</code> (secure)</td></tr>
+<tr><td>Security Token</td><td><code>${salesforce.securityToken}</code> (secure)</td></tr>
+<tr><td>API version</td><td><code>59.0</code> <span class="badge badge-orange">Proposed</span></td></tr>
+</table>
+
+<h3>3.4 HTTP Listener — <code>Health_HTTP_Listener_config</code></h3>
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>Host</td><td><code>0.0.0.0</code></td></tr>
+<tr><td>Port</td><td><code>${http.port}</code> (default 8081)</td></tr>
+</table>
+
+<h3>3.5 Configuration Properties — <code>config.yaml</code></h3>
+<table>
+<tr><th>Property</th><th>Value</th></tr>
+<tr><td>File</td><td><code>src/main/resources/config.yaml</code> (+ <code>secure-config.yaml</code> via Secure Properties)</td></tr>
+</table>
+
+<h2>4. Flows</h2>
+
+<h3>4.1 Flow: <code>landowner-sync-scheduler-flow</code></h3>
+<p><span class="badge">doc:id: sched-main-0001</span></p>
+<table>
+<tr><th>Trigger</th><th>Expression</th><th>Description</th></tr>
+<tr><td>Scheduler</td><td><code>${sync.cron}</code> — default <code>0 0 2 * * ?</code> (02:00 daily, Asia/Jerusalem)</td><td>Nightly batch that orchestrates the full Rainbow → Salesforce land-owner synchronisation</td></tr>
+</table>
+<p><strong>Processing Steps</strong></p>
+<div class="flow-step"><div class="step-num">1</div><div><strong>Log start</strong> — emit <code>START landowner-sync correlationId=#[correlationId]</code></div></div>
+<div class="flow-step"><div class="step-num">2</div><div><strong>Purge stale records</strong> — <code>flow-ref</code> to <code>delete-stale-landowners-subflow</code> (removes expired records, preserving manually-managed ones)</div></div>
+<div class="flow-step"><div class="step-num">3</div><div><strong>Fetch current registrations</strong> — <code>flow-ref</code> to <code>fetch-registrations-subflow</code>; result stored in <code>vars.registrations</code></div></div>
+<div class="flow-step"><div class="step-num">4</div><div><strong>Iterate registrations</strong> — <code>&lt;foreach&gt;</code> over <code>vars.registrations</code>:
+<ul>
+<li>4a. <code>flow-ref</code> to <code>build-landowners-for-registration-subflow</code> — fetch owners + business partner, build flat records</li>
+<li>4b. Accumulate built records into <code>vars.landownerBatch</code></li>
+</ul></div></div>
+<div class="flow-step"><div class="step-num">5</div><div><strong>Filter empties</strong> — remove any registration that yielded zero owners (<code>vars.landownerBatch filter (not isEmpty($))</code>)</div></div>
+<div class="flow-step"><div class="step-num">6</div><div><strong>Upsert to Salesforce</strong> — <code>flow-ref</code> to <code>upsert-landowners-subflow</code> (batched upsert by external ID)</div></div>
+<div class="flow-step"><div class="step-num">7</div><div><strong>Log summary</strong> — emit <code>END landowner-sync upserted=#[vars.upsertCount] deleted=#[vars.deleteCount]</code></div></div>
+
+<h3>4.2 Sub-flow: <code>delete-stale-landowners-subflow</code></h3>
+<p><span class="badge">doc:id: sub-delete-0002</span> &nbsp; <em>Sub-flow called by 4.1 step 2.</em></p>
+<p><strong>Processing Steps</strong></p>
+<div class="flow-step"><div class="step-num">1</div><div><strong>Query expired records</strong> — Salesforce <code>query</code>: <code>SELECT Id FROM LandOwner__c WHERE ToDate__c != null AND ToDate__c &lt; TODAY AND Lawyer__c = null</code></div></div>
+<div class="flow-step"><div class="step-num">2</div><div><strong>Guard</strong> — <code>&lt;choice&gt;</code>: if no rows, skip delete and set <code>vars.deleteCount = 0</code></div></div>
+<div class="flow-step"><div class="step-num">3</div><div><strong>Delete</strong> — Salesforce <code>delete</code> on the returned <code>Id</code> list; capture count into <code>vars.deleteCount</code></div></div>
+<p><em>Rule: a record is "stale" only when its <code>ToDate__c</code> has passed. Records with an empty <code>ToDate__c</code> are never deleted. Records where <code>Lawyer__c</code> was filled manually by Shikun &amp; Binui are excluded from deletion so manual work is preserved.</em></p>
+
+<h3>4.3 Sub-flow: <code>fetch-registrations-subflow</code></h3>
+<p><span class="badge">doc:id: sub-fetch-reg-0003</span> &nbsp; <em>Sub-flow called by 4.1 step 3.</em></p>
+<p><strong>Processing Steps</strong></p>
+<div class="flow-step"><div class="step-num">1</div><div><strong>Request registrations</strong> — HTTP GET on <code>Rainbow_Analytics_HTTP_Request_config</code>:<br/><code>/registrations?$filter=isCurrentRegistration eq true</code></div></div>
+<div class="flow-step"><div class="step-num">2</div><div><strong>Page</strong> — follow OData <code>@odata.nextLink</code> until exhausted (collect all pages)</div></div>
+<div class="flow-step"><div class="step-num">3</div><div><strong>Map</strong> — project each registration to <code>{ registrationKey, buildingCode, propertyKey, projectCode, rightType, plot }</code> into <code>vars.registrations</code></div></div>
+
+<h3>4.4 Sub-flow: <code>build-landowners-for-registration-subflow</code></h3>
+<p><span class="badge">doc:id: sub-build-0004</span> &nbsp; <em>Sub-flow called by 4.1 step 4a, once per registration.</em></p>
+<p><strong>Processing Steps</strong></p>
+<div class="flow-step"><div class="step-num">1</div><div><strong>Fetch owners</strong> — HTTP GET <code>/owners?$filter=toDate eq null and registrationKey eq #[vars.reg.registrationKey]</code></div></div>
+<div class="flow-step"><div class="step-num">2</div><div><strong>Skip if no owners</strong> — <code>&lt;choice&gt;</code>: if owners list is empty, return <code>[]</code> (registration filtered out per business rule)</div></div>
+<div class="flow-step"><div class="step-num">3</div><div><strong>Enrich business partner</strong> — for each owner, HTTP GET on <code>Rainbow_Operation_HTTP_Request_config</code>: <code>/businessPartners?$filter=id eq #[owner.businessPartnerId]</code> to obtain <code>idtype</code>, name, address, legal id</div></div>
+<div class="flow-step"><div class="step-num">4</div><div><strong>Build flat records</strong> — DataWeave transform combining registration + owner + business partner into <code>LandOwner__c</code> shape (see Section 9.1)</div></div>
+<div class="flow-step"><div class="step-num">5</div><div><strong>Resolve Building lookup</strong> — <code>&lt;choice&gt;</code>: if <code>buildingCode</code> present, set <code>Building__r.BuildingCode__c</code> for the relationship; otherwise leave building null (record linked at project level only)</div></div>
+
+<h3>4.5 Sub-flow: <code>upsert-landowners-subflow</code></h3>
+<p><span class="badge">doc:id: sub-upsert-0005</span> &nbsp; <em>Sub-flow called by 4.1 step 6.</em></p>
+<p><strong>Processing Steps</strong></p>
+<div class="flow-step"><div class="step-num">1</div><div><strong>Chunk</strong> — split <code>vars.landownerBatch</code> into chunks of <code>${salesforce.batchSize}</code> (default 200)</div></div>
+<div class="flow-step"><div class="step-num">2</div><div><strong>Upsert</strong> — Salesforce <code>upsert</code> on <code>LandOwner__c</code> using external ID field <code>External_Key__c</code></div></div>
+<div class="flow-step"><div class="step-num">3</div><div><strong>Collect results</strong> — accumulate success/failure counts; log any item-level failures with their <code>External_Key__c</code></div></div>
+
+<p><strong>Response / Outcome</strong></p>
+<table>
+<tr><th>Outcome</th><th>Channel</th><th>Detail</th></tr>
+<tr><td>Success</td><td>Log</td><td><code>END landowner-sync upserted=N deleted=M</code></td></tr>
+<tr><td>Partial failure</td><td>Log (WARN)</td><td>Per-record <code>External_Key__c</code> + Salesforce error message</td></tr>
+<tr><td>Fatal failure</td><td>Global error handler</td><td>Logged at ERROR; run marked failed (see Section 6)</td></tr>
+</table>
+
+<h2>5. Configuration Properties</h2>
+<table>
+<tr><th>Property Key</th><th>Default / Placeholder</th><th>Description</th></tr>
+<tr><td><code>http.port</code></td><td><code>8081</code></td><td>Local health-listener port</td></tr>
+<tr><td><code>sync.cron</code></td><td><code>0 0 2 * * ?</code></td><td>Nightly schedule (Asia/Jerusalem)</td></tr>
+<tr><td><code>rainbow.analytics.host</code></td><td><code>ziv-rainbow.net</code></td><td>Rainbow Analytics OData host</td></tr>
+<tr><td><code>rainbow.operation.host</code></td><td><code>ziv-rainbow.net</code></td><td>Rainbow Operation OData host</td></tr>
+<tr><td><code>rainbow.username</code></td><td><code>CHANGE_ME</code></td><td>Rainbow service account username <em>(replace before running)</em></td></tr>
+<tr><td><code>rainbow.password</code></td><td><code>CHANGE_ME</code></td><td>Rainbow service account password <em>(secure — replace before running)</em></td></tr>
+<tr><td><code>rainbow.timeout.ms</code></td><td><code>30000</code></td><td>HTTP connection/response timeout</td></tr>
+<tr><td><code>salesforce.username</code></td><td><code>CHANGE_ME</code></td><td>Salesforce integration user <em>(replace before running)</em></td></tr>
+<tr><td><code>salesforce.password</code></td><td><code>CHANGE_ME</code></td><td>Salesforce password <em>(secure — replace before running)</em></td></tr>
+<tr><td><code>salesforce.securityToken</code></td><td><code>CHANGE_ME</code></td><td>Salesforce security token <em>(secure — replace before running)</em></td></tr>
+<tr><td><code>salesforce.batchSize</code></td><td><code>200</code></td><td>Upsert chunk size</td></tr>
+</table>
+
+<h2>6. Error Handling Strategy</h2>
+<table>
+<tr><th>Error Type</th><th>Scope</th><th>Behaviour</th></tr>
+<tr><td><code>HTTP:CONNECTIVITY</code> / <code>HTTP:TIMEOUT</code> (Rainbow)</td><td>On Error Continue (per registration)</td><td>Retry up to 3× with backoff; on final failure, log the failing <code>registrationKey</code> and continue with the next registration (no abort)</td></tr>
+<tr><td><code>SALESFORCE:CONNECTIVITY</code></td><td>On Error Propagate (global)</td><td>Abort run, log at ERROR; next nightly run retries the full set (idempotent upsert)</td></tr>
+<tr><td><code>SALESFORCE:INVALID_FIELD</code> / item failures</td><td>On Error Continue (upsert)</td><td>Log per-record error with <code>External_Key__c</code>; remaining records still committed</td></tr>
+<tr><td><code>ANY</code> (uncaught)</td><td>Global default error handler</td><td>Log full error + correlationId at ERROR level</td></tr>
+</table>
+
+<h2>7. Logging Convention</h2>
+<table>
+<tr><th>Event</th><th>Level</th><th>Message Pattern</th></tr>
+<tr><td>Run start</td><td>INFO</td><td><code>START landowner-sync correlationId={id}</code></td></tr>
+<tr><td>Purge complete</td><td>INFO</td><td><code>Deleted {n} stale LandOwner__c records</code></td></tr>
+<tr><td>Registrations fetched</td><td>INFO</td><td><code>Fetched {n} current registrations</code></td></tr>
+<tr><td>Registration skipped</td><td>DEBUG</td><td><code>Skipping registrationKey={k} — no owners</code></td></tr>
+<tr><td>Rainbow call failed</td><td>WARN</td><td><code>Rainbow fetch failed registrationKey={k}: {msg}</code></td></tr>
+<tr><td>Upsert item failed</td><td>WARN</td><td><code>Upsert failed externalKey={ek}: {sfError}</code></td></tr>
+<tr><td>Run end</td><td>INFO</td><td><code>END landowner-sync upserted={n} deleted={m} skipped={s}</code></td></tr>
+</table>
+<p>Log file <code>sb-landowner-sync.log</code>, rolling at 10 MB with 10 archived files retained (proposed log4j2 policy).</p>
+
+<h2>8. External API Reference</h2>
+
+<h3>8.1 Rainbow — Analytics OData</h3>
+<table>
+<tr><th>Attribute</th><th>Value</th></tr>
+<tr><td>Base URL</td><td><code>https://ziv-rainbow.net/api/analytics/odata</code></td></tr>
+<tr><td>Method</td><td>GET</td></tr>
+<tr><td>Endpoints</td><td><code>/registrations?$filter=isCurrentRegistration eq true</code><br/><code>/owners?$filter=toDate eq null and registrationKey eq {key}</code></td></tr>
+<tr><td>Response fields used</td><td>registrations: <code>registrationKey, buildingCode, propertyKey, righttype, project_code, plot</code>; owners: <code>businessPartnerId, ownerspercent, fromdate, toDate</code></td></tr>
+<tr><td>Authentication</td><td>HTTP Basic <code>${rainbow.username}</code> / <code>${rainbow.password}</code></td></tr>
+</table>
+
+<h3>8.2 Rainbow — Operation OData</h3>
+<table>
+<tr><th>Attribute</th><th>Value</th></tr>
+<tr><td>Base URL</td><td><code>https://ziv-rainbow.net/api/operation/odata</code></td></tr>
+<tr><td>Method</td><td>GET</td></tr>
+<tr><td>Endpoint</td><td><code>/businessPartners?$filter=id eq {id}</code></td></tr>
+<tr><td>Response fields used</td><td><code>buisnesspartnername, buisnesspartnerlegalidnumber, buisnesspartneradress, idtype</code></td></tr>
+<tr><td>Authentication</td><td>HTTP Basic <code>${rainbow.username}</code> / <code>${rainbow.password}</code></td></tr>
+</table>
+
+<h3>8.3 Salesforce</h3>
+<table>
+<tr><th>Attribute</th><th>Value</th></tr>
+<tr><td>Object</td><td><code>LandOwner__c</code></td></tr>
+<tr><td>Operations</td><td><code>query</code> (stale lookup), <code>delete</code>, <code>upsert</code> (external ID <code>External_Key__c</code>)</td></tr>
+<tr><td>Authentication</td><td>Username/Password + Security Token</td></tr>
+</table>
+
+<h2>9. Data Transformation Detail</h2>
+
+<div class="section-box">
+<strong>9.1 Build flat <code>LandOwner__c</code> record</strong> — combines a Rainbow registration, its owner, and the owner's business partner into a single flat Salesforce record. Field mapping is taken directly from the requirements document. <code>External_Key__c</code> is the Rainbow <strong>owner record id</strong> (confirmed), used for idempotent upsert. <code>Project__c</code> is written as an external-id lookup relationship (<code>Project__r</code>).<br/><br/>
+<strong>DataWeave:</strong>
+<pre><span class="keyword">%dw</span> 2.0
+<span class="keyword">output</span> application/java
+<span class="comment">// inputs: vars.reg (registration), owner, bp (businessPartner)</span>
+---
+{
+  <span class="attr">External_Key__c</span>: owner.id <span class="keyword">as</span> String,            <span class="comment">// Rainbow owner record id (upsert key)</span>
+  <span class="attr">Name</span>: (bp.buisnesspartnername default <span class="string">""</span>)[0 to 79],   <span class="comment">// required, max 80</span>
+  <span class="attr">Idtype__c</span>: bp.idtype,                                <span class="comment">// ח.פ / ת.ז</span>
+  <span class="attr">IdNumber__c</span>: owner.buisnesspartnerlegalidnumber default bp.buisnesspartnerlegalidnumber,
+  <span class="attr">Address__c</span>: bp.buisnesspartneradress,
+  <span class="attr">Essence__c</span>: vars.reg.righttype,                      <span class="comment">// מהות הזכות</span>
+  <span class="attr">OwnershipPercent__c</span>: owner.ownerspercent,
+  <span class="comment">// Project__c is a lookup — related by external code via Project__r</span>
+  <span class="attr">Project__r</span>: { <span class="attr">Project_Code__c</span>: vars.reg.project_code },   <span class="comment">// mandatory</span>
+  <span class="attr">BuildingCode__c</span>: vars.reg.buildingCode,
+  <span class="attr">Plot__c</span>: vars.reg.plot,
+  <span class="attr">FromDate__c</span>: owner.fromdate as Date,
+  <span class="attr">ToDate__c</span>: owner.toDate as Date <span class="keyword">default</span> null
+}</pre>
+</div>
+
+<div class="section-box">
+<strong>9.2 Conditional Building lookup</strong> — when a <code>buildingCode</code> exists the record is related to a <code>Building__c</code> via external-id relationship; otherwise the building reference is omitted and the record stands at project level only.<br/><br/>
+<strong>DataWeave:</strong>
+<pre><span class="keyword">%dw</span> 2.0
+<span class="keyword">output</span> application/java
+---
+payload <span class="keyword">map</span> ((rec) -&gt;
+  <span class="keyword">if</span> (rec.BuildingCode__c != null)
+    rec ++ { <span class="attr">Building__r</span>: { <span class="attr">BuildingCode__c</span>: rec.BuildingCode__c } }
+  <span class="keyword">else</span>
+    rec <span class="keyword">-</span> <span class="string">"BuildingCode__c"</span>
+)</pre>
+</div>
+
+<h2>10. Build &amp; Run</h2>
+<pre><span class="comment"># Build</span>
+mvn clean package
+
+<span class="comment"># Build without tests</span>
+mvn clean package -DskipTests
+
+<span class="comment"># Deploy to local Mule runtime</span>
+mvn clean package -DmuleDeploy</pre>
+
+<h2>11. Sample Request &amp; Response</h2>
+<p>The integration is scheduler-driven (no inbound API). The samples below show the outbound Rainbow OData calls and the resulting Salesforce upsert payload.</p>
+<pre><span class="comment"># 1. Current registrations</span>
+GET https://ziv-rainbow.net/api/analytics/odata/registrations?$filter=isCurrentRegistration eq true and buildingCode eq '7976'
+
+<span class="comment"># 2. Owners for a registration</span>
+GET https://ziv-rainbow.net/api/analytics/odata/owners?$filter=toDate eq null and registrationKey eq 818
+
+<span class="comment"># 3. Business partner enrichment</span>
+GET https://ziv-rainbow.net/api/operation/odata/businessPartners?$filter=id eq 11</pre>
+<pre><span class="comment"># Resulting Salesforce upsert record (LandOwner__c)</span>
+{
+  <span class="attr">"External_Key__c"</span>: <span class="string">"55021"</span>,
+  <span class="attr">"Name"</span>: <span class="string">"שיכון ובינוי נדלן בע\"מ"</span>,
+  <span class="attr">"Idtype__c"</span>: <span class="string">"ח.פ"</span>,
+  <span class="attr">"IdNumber__c"</span>: <span class="string">"520021171"</span>,
+  <span class="attr">"Address__c"</span>: <span class="string">"הירדן 1א"</span>,
+  <span class="attr">"Essence__c"</span>: <span class="string">"חכירה"</span>,
+  <span class="attr">"OwnershipPercent__c"</span>: <span class="string">100</span>,
+  <span class="attr">"Project__r"</span>: { <span class="attr">"Project_Code__c"</span>: <span class="string">"PRJ-1024"</span> },
+  <span class="attr">"BuildingCode__c"</span>: <span class="string">"7976"</span>,
+  <span class="attr">"Building__r"</span>: { <span class="attr">"BuildingCode__c"</span>: <span class="string">"7976"</span> },
+  <span class="attr">"FromDate__c"</span>: <span class="string">"2024-01-01"</span>,
+  <span class="attr">"ToDate__c"</span>: <span class="string">null</span>
+}</pre>
+
+<h2>12. Design Assumptions &amp; Open Questions</h2>
+<div class="section-box">
+The four high-impact items below were <strong>confirmed by the client</strong> and are reflected in the design above. The remaining open questions are operational and do not block development.
+</div>
+
+<h3>Confirmed Decisions</h3>
+<table>
+<tr><th>Item</th><th>Confirmed decision</th></tr>
+<tr><td>Stale-record purge driver</td><td>Add <code>ToDate__c</code> on <code>LandOwner__c</code> mapped from <code>owners.toDate</code>; delete where <code>ToDate__c &lt; TODAY</code> AND <code>Lawyer__c = null</code> (empty <code>ToDate__c</code> and lawyer-managed records preserved) <span class="badge badge-green">Confirmed</span></td></tr>
+<tr><td>Upsert external key</td><td><code>External_Key__c</code> = Rainbow <strong>owner record id</strong> (<code>owner.id</code>) <span class="badge badge-green">Confirmed</span></td></tr>
+<tr><td>Rainbow OData authentication</td><td>HTTP <strong>Basic</strong> — service username / password (secure properties) <span class="badge badge-green">Confirmed</span></td></tr>
+<tr><td><code>Project__c</code> population</td><td>Lookup relationship written by external code via <code>Project__r.Project_Code__c</code> = <code>project_code</code> <span class="badge badge-green">Confirmed</span></td></tr>
+</table>
+
+<h3>Remaining Design Assumptions</h3>
+<table>
+<tr><th>Assumption</th><th>Rationale</th><th>Impact if wrong</th></tr>
+<tr><td>Mule runtime 4.6.0, Java 17, batch size 200, 3 retries</td><td>Current supported defaults; no NFRs given</td><td>May need tuning for very high registration volumes</td></tr>
+<tr><td>Building is matched by <code>BuildingCode__c</code> as an external-id relationship on <code>Building__c</code></td><td>Spec says "link to building via lookup if building exists" but not the match key</td><td>If Building lookup uses a different key, the relationship insert fails</td></tr>
+<tr><td>Schedule fixed at 02:00 Asia/Jerusalem</td><td>Spec says "once nightly" without a time</td><td>May clash with Rainbow maintenance windows</td></tr>
+</table>
+
+<h3>Open Questions (non-blocking)</h3>
+<table>
+<tr><th>Question</th><th>Why it matters</th><th>Suggested default</th></tr>
+<tr><td>Should the run send a completion / failure notification (email, Slack, ops dashboard)?</td><td>Unattended nightly batch needs operational visibility</td><td>Email on fatal failure</td></tr>
+<tr><td>Expected volume of current registrations per night?</td><td>Drives paging, batch size and SLA</td><td>Assume &lt; 50k records</td></tr>
+<tr><td>Confirm the Building lookup match key on <code>Building__c</code></td><td>Determines the <code>Building__r</code> external-id field name</td><td><code>BuildingCode__c</code></td></tr>
+</table>
+
+<div class="footer">
+  SB-LandOwner-Sync &nbsp;|&nbsp; Technical Specification v1.0.0 &nbsp;|&nbsp; MuleSoft Anypoint Platform 4.6.0 &nbsp;|&nbsp; June 2026
+</div>
+
+</body>
+</html>
