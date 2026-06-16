@@ -65,7 +65,39 @@ Never echo the password back in plain text in your responses.
 
 Settings file: `C:\Users\ohadp\.m2\settings.xml` (user-global; **outside any git repo** — safe for credentials).
 
-1. Read it. If there is no `<server>` with `id=exchange`, add one inside `<servers>`:
+1. Read it. If there is no `<server>` with `id=exchange`, add one inside `<servers>` (expand `<servers/>` if self-closed). Use whichever auth the user chose:
+
+   **Connected App (client credentials — recommended; required for SSO/MFA orgs).** The Exchange Maven facade
+   takes a connected app as a special username/password pair — username is the literal `~~~Client~~~` and the
+   password is `<clientId>~?~<clientSecret>`:
+   ```xml
+   <server>
+       <id>exchange</id>
+       <username>~~~Client~~~</username>
+       <password>CLIENT_ID~?~CLIENT_SECRET</password>
+   </server>
+   ```
+   The connected app needs the **Exchange Contributor** scope on the target org/business group.
+
+   **CRITICAL — add TWO server entries with the same credentials.** The publish *upload* uses the
+   `distributionManagement` repo id (`exchange`), but the Exchange pre-deploy *status check* re-resolves the
+   publication status (`preConditions.json`) through the pom `<repository>` whose id is `anypoint-exchange-v3`.
+   If only `exchange` is credentialed, the status check fails with **`401 Unauthorized` → "Artifact could not be
+   resolved"** even though the upload succeeded (a `runId` is returned). So add BOTH:
+   ```xml
+   <server>
+       <id>exchange</id>
+       <username>~~~Client~~~</username>
+       <password>CLIENT_ID~?~CLIENT_SECRET</password>
+   </server>
+   <server>
+       <id>anypoint-exchange-v3</id>   <!-- must match the pom <repository> id used for resolution -->
+       <username>~~~Client~~~</username>
+       <password>CLIENT_ID~?~CLIENT_SECRET</password>
+   </server>
+   ```
+
+   **Username / password (only if the org does not enforce SSO/MFA):**
    ```xml
    <server>
        <id>exchange</id>
@@ -73,8 +105,7 @@ Settings file: `C:\Users\ohadp\.m2\settings.xml` (user-global; **outside any git
        <password>ANYPOINT_PASSWORD</password>
    </server>
    ```
-   Replace placeholders with the supplied credentials. If `<servers>` is self-closed (`<servers/>`), expand it.
-2. Optional hardening: suggest `mvn --encrypt-password` so the stored password is encrypted rather than plaintext.
+2. Optional hardening: suggest `mvn --encrypt-password` so the stored secret is encrypted rather than plaintext.
 3. **Never** write credentials into the project's `pom.xml` or any file under the project folder.
 
 ## Step 5 — Build and publish
