@@ -51,34 +51,41 @@ worker type (e.g. `MICRO`), worker count (e.g. `1`), Mule runtime version, plus 
 
 ## Step 3 — Add the deployment config to pom.xml
 
-Add a `<configuration>` to the existing `mule-maven-plugin` element. Use `<server>` (a settings.xml id) for auth
-— **do not** put `<username>`/`<password>` literals in the pom, and never mix username/password with
-`<connectedAppClientId>`.
+Add a `<configuration>` to the existing `mule-maven-plugin` element. **Never** put credential literals in the pom.
+**Recommended auth = Connected App (client credentials)** — works with SSO/MFA; the client id/secret come from
+properties defined in a `settings.xml` active profile (Step 5), so the secret is never in the pom or on the
+command line. (Username/password via `<server>` is the alternative; never mix username/password with
+`<connectedAppClientId>`.)
 
-**CloudHub 2.0:**
+**CloudHub 2.0 (verified working with mule-maven-plugin 4.9.1):**
 ```xml
 <configuration>
     <cloudhub2Deployment>
-        <server>cloudhub2</server>
         <provider>MC</provider>
-        <target>${ch2.target}</target>
         <environment>${ch2.environment}</environment>
+        <target>${ch2.target}</target>
         <businessGroupId>${ch2.businessGroupId}</businessGroupId>
         <applicationName>${ch2.applicationName}</applicationName>
         <muleVersion>${app.runtime}</muleVersion>
-        <javaVersion>17</javaVersion>
         <replicas>1</replicas>
         <vCores>0.1</vCores>
+        <!-- Connected App auth; values resolved from settings.xml active profile -->
+        <connectedAppClientId>${anypoint.connectedApp.clientId}</connectedAppClientId>
+        <connectedAppClientSecret>${anypoint.connectedApp.clientSecret}</connectedAppClientSecret>
+        <connectedAppGrantType>client_credentials</connectedAppGrantType>
+        <deploymentSettings>
+            <generateDefaultPublicUrl>true</generateDefaultPublicUrl>
+        </deploymentSettings>
         <properties>
             <!-- resolves ${secure.key} on the CloudHub runtime; omit if the app has no secure props -->
             <secure.key>${ch2.secure.key}</secure.key>
         </properties>
-        <deploymentTimeout>1000000</deploymentTimeout>
     </cloudhub2Deployment>
 </configuration>
 ```
-> To hide `secure.key` in Runtime Manager, put it in `<secureProperties>` instead of `<properties>` — use one,
-> not both.
+> Notes: `businessGroupId` = the Org ID GUID for the root org. `target` must match the shared-space name in
+> Runtime Manager exactly (e.g. `Cloudhub-US-East-2`). Valid `vCores`: 0.1, 0.2, 0.5, 1, … To hide `secure.key`
+> in Runtime Manager, use `<secureProperties>` instead of `<properties>` (one, not both).
 
 **CloudHub 1.0** (only if requested): use `<cloudHubDeployment>` with `<server>`, `<environment>`,
 `<applicationName>`, `<muleVersion>`, `<region>`, `<workerType>`, `<workers>`, and a `<properties>` map for
@@ -97,15 +104,31 @@ the real AES key as a CloudHub **secure** property.
 ## Step 5 — Ensure credentials in settings.xml
 
 Settings file: `C:\Users\ohadp\.m2\settings.xml` (user-global; outside any repo).
-1. If there is no `<server>` with `id=cloudhub2` (or `cloudhub` for CH1), add one inside `<servers>`:
-   ```xml
-   <server>
-       <id>cloudhub2</id>
-       <username>ANYPOINT_USERNAME</username>
-       <password>ANYPOINT_PASSWORD</password>
-   </server>
-   ```
-2. Never write credentials into the project folder. Optionally suggest `mvn --encrypt-password`.
+
+**Connected App (recommended)** — the `<cloudhub2Deployment>` references `${anypoint.connectedApp.clientId}` /
+`${anypoint.connectedApp.clientSecret}`, so define them in an **active profile** (keeps the secret out of the pom
+and off the command line):
+```xml
+<profiles>
+    <profile>
+        <id>anypoint-connected-app</id>
+        <properties>
+            <anypoint.connectedApp.clientId>CLIENT_ID</anypoint.connectedApp.clientId>
+            <anypoint.connectedApp.clientSecret>CLIENT_SECRET</anypoint.connectedApp.clientSecret>
+        </properties>
+    </profile>
+</profiles>
+<activeProfiles>
+    <activeProfile>anypoint-connected-app</activeProfile>
+</activeProfiles>
+```
+The connected app needs **Runtime Manager** scopes (Create/Read/Manage/Delete Applications) granted on the target
+environment. (One pipeline-wide app can also carry the Exchange Contributor scope — same app for both skills.)
+
+**Username/password (alternative, non-SSO orgs)** — instead use a `<server id=cloudhub2>` with
+`<username>`/`<password>` and reference `<server>cloudhub2</server>` in the deployment block.
+
+Never write credentials into the project folder. Optionally `mvn --encrypt-password`.
 
 ## Step 6 — Build and deploy
 
@@ -117,7 +140,8 @@ $proj = "<PROJECT_PATH>"
 # Build the deployable artifact
 & $mvn -f "$proj\pom.xml" clean package -DskipTests
 
-# Deploy to CloudHub 2.0 (mule-maven-plugin deploy goal; reads <cloudhub2Deployment>, uses 'cloudhub2' server)
+# Deploy to CloudHub 2.0 (mule:deploy goal reads <cloudhub2Deployment>; auth via the connected-app active profile)
+# Note: use the `mule:deploy` GOAL (not `mvn deploy`) so this does NOT also trigger an Exchange distributionManagement upload.
 & $mvn -f "$proj\pom.xml" mule:deploy -DskipTests `
     "-Dch2.environment=<ENV>" `
     "-Dch2.businessGroupId=<BG_OR_ORG_GUID>" `
