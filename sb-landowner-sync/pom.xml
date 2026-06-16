@@ -3,9 +3,9 @@
 
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>com.shikunbinui.integration</groupId>
+	<groupId>190a90f6-e8e7-4652-973e-248a7deae5f6</groupId>
 	<artifactId>sb-landowner-sync</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.0-SNAPSHOT</version>
 	<packaging>mule-application</packaging>
 
 	<name>sb-landowner-sync</name>
@@ -48,9 +48,13 @@
 				<configuration>
 					<runtimeVersion>${app.runtime}</runtimeVersion>
 					<runtimeProduct>MULE_EE</runtimeProduct>
+					<!-- secure.key must come from a system property (the secure-properties
+					     module won't read it from a file). Provided here for CLI/CI runs.
+					     For the Studio GUI MUnit runner, add -Dsecure.key=... to the MUnit
+					     run configuration's VM arguments (see CLAUDE.md). Production overrides
+					     with the real AES key. -->
 					<systemPropertyVariables>
-						<!-- secure-config.yaml holds plaintext placeholders, so any key resolves -->
-						<secure.key>munit-local-test-key</secure.key>
+						<secure.key>localDevKey1234567890</secure.key>
 					</systemPropertyVariables>
 				</configuration>
 				<executions>
@@ -155,5 +159,14 @@
 			<layout>default</layout>
 		</pluginRepository>
 	</pluginRepositories>
+
+	<distributionManagement>
+		<repository>
+			<id>exchange</id>
+			<name>Anypoint Exchange v3</name>
+			<url>https://maven.anypoint.mulesoft.com/api/v3/organizations/190a90f6-e8e7-4652-973e-248a7deae5f6/maven</url>
+			<layout>default</layout>
+		</repository>
+	</distributionManagement>
 
 </project>
