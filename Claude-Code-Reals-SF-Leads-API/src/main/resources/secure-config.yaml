@@ -1,0 +1,19 @@
+# =====================================================================
+# Claude-Code-Reals-SF-Leads-API - SECURE configuration properties
+# =====================================================================
+# These keys are read via the secure::<key> placeholder syntax and are
+# decrypted at runtime by the Mule Secure Configuration Properties
+# module using the key supplied in -Dsecure.key=<aesKey>.
+#
+# IMPORTANT - these values MUST be encrypted before deployment using the
+# Anypoint Studio "Mule Secure Properties Tool" (AES/CBC). After
+# encryption each value looks like:  ![bXVsZXNvZnQ...==]
+#
+# The CHANGE_ME placeholders below are intentionally NOT real secrets and
+# MUST be replaced with the encrypted ciphertext for the target
+# environment before the application is run against a live org.
+# =====================================================================
+
+salesforce:
+  password: "CHANGE_ME"
+  securityToken: "CHANGE_ME"

@@ -1,0 +1,14 @@
+{
+  "main": "reals-sf-leads-api.raml",
+  "name": "Claude-Code-Reals-SF-Leads-API",
+  "classifier": "raml",
+  "tags": [],
+  "groupId": "190a90f6-e8e7-4652-973e-248a7deae5f6",
+  "assetId": "claude-code-reals-sf-leads-api",
+  "version": "1.0.0",
+  "apiVersion": "v1",
+  "dependencies": [],
+  "organizationId": "190a90f6-e8e7-4652-973e-248a7deae5f6",
+  "originalFormatVersion": "1.0",
+  "descriptorVersion": "1.0.0"
+}

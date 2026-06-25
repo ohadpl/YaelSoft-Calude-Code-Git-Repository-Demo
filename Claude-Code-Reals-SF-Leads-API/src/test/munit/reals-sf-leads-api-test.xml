@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+          http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+    <munit:config name="reals-sf-leads-api-test.xml" doc:id="munit-cfg-0001">
+        <munit:parameterizations/>
+    </munit:config>
+
+    <!-- ============================================================ -->
+    <!-- POST /leads - happy path                                     -->
+    <!-- ============================================================ -->
+    <munit:test name="post-leads-happy-path-returns-201"
+                doc:id="t-post-0001"
+                description="Valid lead is transformed and created in Salesforce; 201 + salesforceLeadId returned">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock SF create" doc:id="t-post-mock-0001"
+                                   processor="salesforce:create">
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[{ id: '00Q5g00000ABCDEFGH', success: true }]]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <set-payload doc:name="set request payload" doc:id="t-post-payload-0001"
+                         value="#[output application/java ---{ customer: { firstName: 'Dana', lastName: 'Levi', email: 'dana.levi@example.com', phone: '+972-50-1234567', company: 'Private' }, property: { apartmentId: 'A-11', projectName: 'Rental Housing - Tel Aviv North', rooms: 3 } }]"/>
+            <flow-ref name="post:\leads:application\json:reals-sf-leads-api-config"
+                      doc:name="ref post leads" doc:id="t-post-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="httpStatus == 201" doc:id="t-post-assert-status-0001"
+                                     expression="#[vars.httpStatus]"
+                                     is="#[MunitTools::equalTo(201)]"/>
+            <munit-tools:assert-that doc:name="salesforceLeadId set" doc:id="t-post-assert-id-0001"
+                                     expression="#[output application/java --- payload.salesforceLeadId]"
+                                     is="#[MunitTools::equalTo('00Q5g00000ABCDEFGH')]"/>
+            <munit-tools:assert-that doc:name="status CREATED" doc:id="t-post-assert-cre-0001"
+                                     expression="#[output application/java --- payload.status]"
+                                     is="#[MunitTools::equalTo('CREATED')]"/>
+            <munit-tools:verify-call doc:name="SF create called once" doc:id="t-post-verify-0001"
+                                     processor="salesforce:create" times="1"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- POST /leads - business validation failure -> 400             -->
+    <!-- ============================================================ -->
+    <munit:test name="post-leads-no-contact-returns-400"
+                doc:id="t-val-0001"
+                description="Lead with neither email nor phone fails business validation; 400 returned and SF create not called">
+        <munit:execution>
+            <set-payload doc:name="set payload no contact" doc:id="t-val-payload-0001"
+                         value="#[output application/java ---{ customer: { lastName: 'Levi' }, property: { apartmentId: 'A-11' } }]"/>
+            <flow-ref name="post:\leads:application\json:reals-sf-leads-api-config"
+                      doc:name="ref post leads" doc:id="t-val-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="httpStatus == 400" doc:id="t-val-assert-status-0001"
+                                     expression="#[vars.httpStatus]"
+                                     is="#[MunitTools::equalTo(400)]"/>
+            <munit-tools:assert-that doc:name="error BAD_REQUEST" doc:id="t-val-assert-err-0001"
+                                     expression="#[output application/java --- payload.error]"
+                                     is="#[MunitTools::equalTo('BAD_REQUEST')]"/>
+            <munit-tools:verify-call doc:name="SF create not called" doc:id="t-val-verify-0001"
+                                     processor="salesforce:create" times="0"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- POST /leads - Salesforce error -> 500                        -->
+    <!-- ============================================================ -->
+    <munit:test name="post-leads-salesforce-error-returns-500"
+                doc:id="t-sferr-0001"
+                description="Salesforce connectivity error maps to 500 INTERNAL_ERROR via the error handler">
+        <munit:behavior>
+            <munit-tools:mock-when doc:name="mock SF create error" doc:id="t-sferr-mock-0001"
+                                   processor="salesforce:create">
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="SALESFORCE:CONNECTIVITY"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+        <munit:execution>
+            <munit:set-event>
+                <munit:payload value="#[output application/java ---{ customer: { lastName: 'Levi', email: 'a@b.com' }, property: { apartmentId: 'A-11' } }]"/>
+            </munit:set-event>
+            <try doc:name="try" doc:id="t-sferr-try-0001">
+                <flow-ref name="post:\leads:application\json:reals-sf-leads-api-config"
+                          doc:name="ref post leads" doc:id="t-sferr-ref-0001"/>
+                <error-handler>
+                    <on-error-continue type="ANY" doc:name="swallow" doc:id="t-sferr-swallow-0001"/>
+                </error-handler>
+            </try>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="httpStatus == 500" doc:id="t-sferr-assert-status-0001"
+                                     expression="#[vars.httpStatus]"
+                                     is="#[MunitTools::equalTo(500)]"/>
+            <munit-tools:assert-that doc:name="error INTERNAL_ERROR" doc:id="t-sferr-assert-err-0001"
+                                     expression="#[output application/java --- payload.error]"
+                                     is="#[MunitTools::equalTo('INTERNAL_ERROR')]"/>
+        </munit:validation>
+    </munit:test>
+
+    <!-- ============================================================ -->
+    <!-- GET /health -> 200 UP                                        -->
+    <!-- ============================================================ -->
+    <munit:test name="get-health-returns-200-up"
+                doc:id="t-health-0001"
+                description="Health endpoint returns 200 with { status: UP }">
+        <munit:execution>
+            <flow-ref name="get:\health:reals-sf-leads-api-config"
+                      doc:name="ref get health" doc:id="t-health-ref-0001"/>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="httpStatus == 200" doc:id="t-health-assert-status-0001"
+                                     expression="#[vars.httpStatus]"
+                                     is="#[MunitTools::equalTo(200)]"/>
+            <munit-tools:assert-that doc:name="status UP" doc:id="t-health-assert-up-0001"
+                                     expression="#[output application/java --- payload.status]"
+                                     is="#[MunitTools::equalTo('UP')]"/>
+        </munit:validation>
+    </munit:test>
+
+</mule>

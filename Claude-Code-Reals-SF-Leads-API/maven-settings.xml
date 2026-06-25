@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Project-local Maven settings for building Claude-Code-Reals-SF-Leads-API.
+
+  Why this file exists:
+  The APIKit/AMF RAML-parser transitive POMs (com.github.amlorg:amf-api-contract,
+  amf-shapes) and the Mule 4.6.x runtime BOM-parent declare the
+  repository-master.mulesoft.org repositories ("MuleSoft releases/snapshots/public")
+  WITHOUT an explicit <releases>/<snapshots> policy. When the mule-maven-plugin's
+  lightweight-repository generator (process-sources goal) maps those Maven
+  repositories to Aether RemoteRepositories it derives an EMPTY checksum policy,
+  which Aether rejects with "Unsupported policy:".
+
+  Re-declaring those repository IDs here, in an ACTIVE profile, with an explicit
+  checksumPolicy/updatePolicy makes the effective (merged) repository definitions
+  well-formed, so the generator no longer sees an empty policy. Maven merges
+  repository definitions by <id>.
+
+  Build with:
+    mvn -s maven-settings.xml clean test
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.1.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.1.0 http://maven.apache.org/xsd/settings-1.1.0.xsd">
+
+    <profiles>
+        <profile>
+            <id>mule-repo-policy-fix</id>
+            <repositories>
+                <repository>
+                    <id>MuleSoft releases</id>
+                    <url>https://repository-master.mulesoft.org/nexus/content/repositories/releases/</url>
+                    <layout>default</layout>
+                    <releases><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+                    <snapshots><enabled>false</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+                </repository>
+                <repository>
+                    <id>MuleSoft snapshots</id>
+                    <url>https://repository-master.mulesoft.org/nexus/content/repositories/snapshots/</url>
+                    <layout>default</layout>
+                    <releases><enabled>false</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+                    <snapshots><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+                </repository>
+                <repository>
+                    <id>MuleSoft public</id>
+                    <url>https://repository-master.mulesoft.org/nexus/content/repositories/public/</url>
+                    <layout>default</layout>
+                    <releases><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+                    <snapshots><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+                </repository>
+                <repository>
+                    <id>mulesoft-snapshots</id>
+                    <url>https://repository-master.mulesoft.org/nexus/content/repositories/snapshots</url>
+                    <layout>default</layout>
+                    <releases><enabled>false</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+                    <snapshots><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+                </repository>
+                <repository>
+                    <id>mulesoft-releases</id>
+                    <url>https://repository.mulesoft.org/releases/</url>
+                    <layout>default</layout>
+                    <releases><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+                    <snapshots><enabled>false</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+                </repository>
+                <repository>
+                    <id>jitpack.io</id>
+                    <url>https://jitpack.io</url>
+                    <layout>default</layout>
+                    <releases><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+                    <snapshots><enabled>false</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
+
+    <activeProfiles>
+        <activeProfile>mule-repo-policy-fix</activeProfile>
+    </activeProfiles>
+
+</settings>

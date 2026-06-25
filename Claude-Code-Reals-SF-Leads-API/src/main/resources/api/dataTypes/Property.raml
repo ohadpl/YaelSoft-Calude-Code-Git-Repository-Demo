@@ -1,0 +1,41 @@
+#%RAML 1.0 DataType
+
+type: object
+description: The property / apartment of interest (fields per business requirements pages 9-10).
+properties:
+  apartmentId:
+    type: string
+    description: Apartment identifier, e.g. "A-11" or "B-32". Mandatory.
+  projectName?:
+    type: string
+    description: Name of the rental-housing project.
+  areaSqm?:
+    type: number
+    description: Total area in square meters.
+  floor?:
+    type: integer
+    description: Floor number.
+  type?:
+    type: string
+    description: Apartment type, e.g. "3BR-Garden".
+  apartmentArea?:
+    type: number
+    description: Internal apartment area in square meters.
+  balconyArea?:
+    type: number
+    description: Balcony area in square meters.
+  rooms?:
+    type: integer
+    description: Number of rooms.
+  airDirections?:
+    type: string
+    description: Air / facing directions, e.g. "North, East".
+  saleStatus?:
+    type: string
+    description: Sale status, e.g. "Available".
+  storage?:
+    type: boolean
+    description: Whether a storage unit is included.
+  parking?:
+    type: boolean
+    description: Whether parking is included.

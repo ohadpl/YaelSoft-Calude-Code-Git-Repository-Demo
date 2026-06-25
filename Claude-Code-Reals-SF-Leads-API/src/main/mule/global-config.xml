@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+          http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+          http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Configuration properties                                     -->
+    <!-- ============================================================ -->
+    <configuration-properties doc:name="Non-secure properties"
+                              doc:id="cfg-props-0001"
+                              file="config.yaml"/>
+
+    <secure-properties:config name="Secure_Properties_Config"
+                              doc:name="Secure Properties Config"
+                              doc:id="cfg-secure-0001"
+                              file="secure-config.yaml"
+                              key="${secure.key}">
+        <secure-properties:encrypt algorithm="AES" mode="CBC"/>
+    </secure-properties:config>
+
+    <!-- ============================================================ -->
+    <!-- HTTP listener config - base path /api                        -->
+    <!-- ============================================================ -->
+    <http:listener-config name="reals-api-httpListenerConfig"
+                          doc:name="HTTP Listener config"
+                          doc:id="cfg-http-listener-0001"
+                          basePath="/api">
+        <http:listener-connection host="${http.host}" port="${http.port}"/>
+    </http:listener-config>
+
+    <!-- ============================================================ -->
+    <!-- APIKit config - routes against the RAML contract             -->
+    <!-- ============================================================ -->
+    <apikit:config name="reals-sf-leads-api-config"
+                   doc:name="APIKit Config"
+                   doc:id="cfg-apikit-0001"
+                   raml="api/reals-sf-leads-api.raml"
+                   outboundHeadersMapName="outboundHeaders"
+                   httpStatusVarName="httpStatus"/>
+
+    <!-- ============================================================ -->
+    <!-- Salesforce config - Username-Password (Basic) auth           -->
+    <!-- Credentials supplied via secure properties; never hardcoded. -->
+    <!-- ============================================================ -->
+    <salesforce:sfdc-config name="Salesforce_Config"
+                            doc:name="Salesforce Config"
+                            doc:id="cfg-sfdc-0001">
+        <salesforce:basic-connection username="${salesforce.username}"
+                                     password="${secure::salesforce.password}"
+                                     securityToken="${secure::salesforce.securityToken}"
+                                     url="${salesforce.authUrl}"/>
+    </salesforce:sfdc-config>
+
+</mule>

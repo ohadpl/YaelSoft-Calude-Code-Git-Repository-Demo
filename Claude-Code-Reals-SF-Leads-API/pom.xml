@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.shikunbinui.integration</groupId>
+	<artifactId>claude-code-reals-sf-leads-api</artifactId>
+	<version>1.0.0</version>
+	<packaging>mule-application</packaging>
+
+	<name>Claude-Code-Reals-SF-Leads-API</name>
+	<description>Shikun &amp; Binui - Rental Housing. Opens LEADS from the REALS system into Salesforce (ADO #5492).</description>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<maven.compiler.source>17</maven.compiler.source>
+		<maven.compiler.target>17</maven.compiler.target>
+
+		<app.runtime>4.6.0</app.runtime>
+		<!-- MUnit executes against a locally available EE runtime distribution.
+		     The 4.6.0 EE distribution BOM is not resolvable in this environment
+		     (entitled MuleSoft EE repo), so tests run on the cached 4.11.x EE
+		     runtime, which is backward compatible with this 4.6.0-targeted app.
+		     The deployable artifact still targets 4.6.0 (app.runtime /
+		     mule-artifact.json minMuleVersion). -->
+		<munit.runtime.version>4.11.4</munit.runtime.version>
+		<mule.maven.plugin.version>4.9.1</mule.maven.plugin.version>
+		<munit.version>3.7.1</munit.version>
+
+		<!-- Connector versions (Mule 4.6.x compatible) -->
+		<mule.http.connector.version>1.8.1</mule.http.connector.version>
+		<mule.apikit.version>1.10.2</mule.apikit.version>
+		<mule.sockets.connector.version>1.2.3</mule.sockets.connector.version>
+		<mule.salesforce.connector.version>11.4.0</mule.salesforce.connector.version>
+		<mule.secure.props.version>1.2.6</mule.secure.props.version>
+	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+				<version>3.2.0</version>
+			</plugin>
+			<plugin>
+				<groupId>org.mule.tools.maven</groupId>
+				<artifactId>mule-maven-plugin</artifactId>
+				<version>${mule.maven.plugin.version}</version>
+				<extensions>true</extensions>
+			</plugin>
+			<plugin>
+				<groupId>com.mulesoft.munit.tools</groupId>
+				<artifactId>munit-maven-plugin</artifactId>
+				<version>${munit.version}</version>
+				<configuration>
+					<runtimeVersion>${munit.runtime.version}</runtimeVersion>
+					<runtimeProduct>MULE_EE</runtimeProduct>
+					<!-- secure.key must come from a system property; the secure-properties
+					     module won't read it from a file. Provided here for CLI/CI runs. -->
+					<systemPropertyVariables>
+						<secure.key>localDevKey1234567890</secure.key>
+					</systemPropertyVariables>
+				</configuration>
+				<executions>
+					<execution>
+						<id>test</id>
+						<phase>test</phase>
+						<goals>
+							<goal>test</goal>
+							<goal>coverage-report</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.mule.connectors</groupId>
+			<artifactId>mule-http-connector</artifactId>
+			<version>${mule.http.connector.version}</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.mule.connectors</groupId>
+			<artifactId>mule-sockets-connector</artifactId>
+			<version>${mule.sockets.connector.version}</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.mule.modules</groupId>
+			<artifactId>mule-apikit-module</artifactId>
+			<version>${mule.apikit.version}</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<dependency>
+			<groupId>com.mulesoft.connectors</groupId>
+			<artifactId>mule-salesforce-connector</artifactId>
+			<version>${mule.salesforce.connector.version}</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+		<dependency>
+			<groupId>com.mulesoft.modules</groupId>
+			<artifactId>mule-secure-configuration-property-module</artifactId>
+			<version>${mule.secure.props.version}</version>
+			<classifier>mule-plugin</classifier>
+		</dependency>
+
+		<!-- MUnit -->
+		<dependency>
+			<groupId>com.mulesoft.munit</groupId>
+			<artifactId>munit-runner</artifactId>
+			<version>${munit.version}</version>
+			<classifier>mule-plugin</classifier>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.mulesoft.munit</groupId>
+			<artifactId>munit-tools</artifactId>
+			<version>${munit.version}</version>
+			<classifier>mule-plugin</classifier>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<repositories>
+		<repository>
+			<id>central</id>
+			<name>Maven Central</name>
+			<url>https://repo1.maven.org/maven2</url>
+			<layout>default</layout>
+			<releases><enabled>true</enabled></releases>
+			<snapshots><enabled>false</enabled></snapshots>
+		</repository>
+		<repository>
+			<id>anypoint-exchange-v3</id>
+			<name>Anypoint Exchange V3</name>
+			<url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
+			<layout>default</layout>
+		</repository>
+		<repository>
+			<id>mulesoft-releases</id>
+			<name>MuleSoft Releases Repository</name>
+			<url>https://repository.mulesoft.org/releases/</url>
+			<layout>default</layout>
+		</repository>
+		<!-- Required by the APIKit RAML/AMF parser chain
+		     (com.github.everit-org.json-schema, com.github.amlorg) which are
+		     published on jitpack only. Declared here with an explicit policy
+		     so the mule-maven-plugin repository serializer never reads an
+		     empty checksum policy from a transitive POM. -->
+		<repository>
+			<id>jitpack.io</id>
+			<name>JitPack</name>
+			<url>https://jitpack.io</url>
+			<layout>default</layout>
+			<releases><enabled>true</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></releases>
+			<snapshots><enabled>false</enabled><updatePolicy>never</updatePolicy><checksumPolicy>warn</checksumPolicy></snapshots>
+		</repository>
+	</repositories>
+
+	<pluginRepositories>
+		<pluginRepository>
+			<id>central</id>
+			<name>Maven Central</name>
+			<url>https://repo1.maven.org/maven2</url>
+			<layout>default</layout>
+			<releases><enabled>true</enabled></releases>
+			<snapshots><enabled>false</enabled></snapshots>
+		</pluginRepository>
+		<pluginRepository>
+			<id>mulesoft-releases</id>
+			<name>MuleSoft Releases Repository</name>
+			<url>https://repository.mulesoft.org/releases/</url>
+			<layout>default</layout>
+		</pluginRepository>
+		<pluginRepository>
+			<id>mulesoft-plugin-releases</id>
+			<name>MuleSoft Plugin Releases Repository</name>
+			<url>https://repository.mulesoft.org/nexus/content/repositories/releases</url>
+			<layout>default</layout>
+		</pluginRepository>
+	</pluginRepositories>
+
+</project>

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Global / APIKit error handler (spec section 6)               -->
+    <!--                                                              -->
+    <!--   APIKIT:BAD_REQUEST / NOT_ACCEPTABLE -> 400                 -->
+    <!--   APIKIT:NOT_FOUND                    -> 404                 -->
+    <!--   APIKIT:METHOD_NOT_ALLOWED           -> 405                 -->
+    <!--   SALESFORCE:*                        -> 500                 -->
+    <!--   ANY (catch-all)                     -> 500                 -->
+    <!--                                                              -->
+    <!-- Each branch returns { error, message } JSON. attributes are  -->
+    <!-- never read inside the handler; only error.* and correlationId-->
+    <!-- ============================================================ -->
+    <error-handler name="reals-sf-leads-api-apiKitErrorHandler" doc:id="err-apikit-0001">
+
+        <on-error-propagate type="APIKIT:BAD_REQUEST" doc:name="400 Bad Request" doc:id="err-400-0001">
+            <logger level="WARN" doc:name="Log bad request" doc:id="err-400-log-0001"
+                    message="#['Validation failed: ' ++ (error.description default '') ++ ' correlationId=' ++ (correlationId default '')]"/>
+            <ee:transform doc:name="400 body" doc:id="err-400-tr-0001">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ error: "BAD_REQUEST", message: error.description default "Bad request" }]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </on-error-propagate>
+
+        <on-error-propagate type="APIKIT:NOT_ACCEPTABLE" doc:name="406 Not Acceptable" doc:id="err-406-0001">
+            <ee:transform doc:name="406 body" doc:id="err-406-tr-0001">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ error: "NOT_ACCEPTABLE", message: error.description default "Not acceptable" }]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus"><![CDATA[406]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </on-error-propagate>
+
+        <on-error-propagate type="APIKIT:NOT_FOUND" doc:name="404 Not Found" doc:id="err-404-0001">
+            <ee:transform doc:name="404 body" doc:id="err-404-tr-0001">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ error: "NOT_FOUND", message: error.description default "Resource not found" }]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus"><![CDATA[404]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </on-error-propagate>
+
+        <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED" doc:name="405 Method Not Allowed" doc:id="err-405-0001">
+            <ee:transform doc:name="405 body" doc:id="err-405-tr-0001">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ error: "METHOD_NOT_ALLOWED", message: error.description default "Method not allowed" }]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus"><![CDATA[405]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </on-error-propagate>
+
+        <on-error-propagate type="SALESFORCE:CONNECTIVITY, SALESFORCE:COMMUNICATION, SALESFORCE:INVALID_INPUT, SALESFORCE:INVALID_RESPONSE, SALESFORCE:LIMIT_EXCEEDED, SALESFORCE:INSUFFICIENT_PERMISSIONS, SALESFORCE:TIMEOUT, SALESFORCE:UNAVAILABLE"
+                            doc:name="500 Salesforce error" doc:id="err-sf-0001" logException="true">
+            <logger level="ERROR" doc:name="Log SF failure" doc:id="err-sf-log-0001"
+                    message="#['Salesforce create failed: ' ++ (error.description default '') ++ ' correlationId=' ++ (correlationId default '')]"/>
+            <ee:transform doc:name="500 body" doc:id="err-sf-tr-0001">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ error: "INTERNAL_ERROR", message: "Salesforce operation failed." }]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </on-error-propagate>
+
+        <on-error-propagate type="ANY" doc:name="500 Internal Error" doc:id="err-any-0001" logException="true">
+            <logger level="ERROR" doc:name="Log uncaught error" doc:id="err-any-log-0001"
+                    message="#['Uncaught error type=' ++ (error.errorType.identifier default '') ++ ' description=' ++ (error.description default '') ++ ' correlationId=' ++ (correlationId default '')]"/>
+            <ee:transform doc:name="500 body" doc:id="err-any-tr-0001">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ error: "INTERNAL_ERROR", message: "An unexpected error occurred." }]]></ee:set-payload>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </on-error-propagate>
+
+    </error-handler>
+
+</mule>

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+          http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+          http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+          http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!-- ============================================================ -->
+    <!-- Main flow - HTTP listener + APIKit router                    -->
+    <!-- ============================================================ -->
+    <flow name="reals-sf-leads-api-main" doc:id="flow-main-0001">
+        <http:listener doc:name="Listener" doc:id="lst-main-0001"
+                       config-ref="reals-api-httpListenerConfig"
+                       path="/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router doc:name="APIkit Router" doc:id="rtr-main-0001"
+                       config-ref="reals-sf-leads-api-config"/>
+        <error-handler ref="reals-sf-leads-api-apiKitErrorHandler"/>
+    </flow>
+
+    <!-- ============================================================ -->
+    <!-- Resource flow - POST /leads                                  -->
+    <!-- ============================================================ -->
+    <flow name="post:\leads:application\json:reals-sf-leads-api-config" doc:id="flow-post-leads-0001">
+        <logger level="INFO" doc:name="Log START" doc:id="log-post-start-0001"
+                message="#['START create-lead correlationId=' ++ (correlationId default '')]"/>
+
+        <!-- Business validation: at least one of customer.email / customer.phone -->
+        <choice doc:name="At least one contact channel?" doc:id="chc-contact-0001">
+            <when expression="#[(payload.customer.email default '') == '' and (payload.customer.phone default '') == '']">
+                <logger level="WARN" doc:name="Log validation failure" doc:id="log-val-fail-0001"
+                        message="#['Validation failed: no contact channel. correlationId=' ++ (correlationId default '')]"/>
+                <ee:transform doc:name="Set 400 body" doc:id="tr-val-400-0001">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "BAD_REQUEST",
+    message: "At least one of customer.email or customer.phone must be provided."
+}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus"><![CDATA[400]]></ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </when>
+            <otherwise>
+                <!-- Transform REALS payload -> Salesforce Lead -->
+                <ee:transform doc:name="REALS -> SF Lead" doc:id="tr-to-lead-0001">
+                    <ee:message>
+                        <ee:set-payload resource="dwl/reals-to-sf-lead.dwl"/>
+                    </ee:message>
+                </ee:transform>
+
+                <!-- Salesforce create Lead -->
+                <salesforce:create doc:name="Create Lead" doc:id="sf-create-0001"
+                                   type="Lead"
+                                   config-ref="Salesforce_Config">
+                    <salesforce:records>#[[payload]]</salesforce:records>
+                </salesforce:create>
+
+                <!-- Salesforce create returns a list; take the first result -->
+                <set-payload value="#[payload[0]]" doc:name="First result" doc:id="set-first-0001"/>
+                <set-variable variableName="sfLeadId" value="#[payload.id default '']"
+                              doc:name="set sfLeadId" doc:id="set-sfid-0001"/>
+
+                <!-- Build 201 response body -->
+                <ee:transform doc:name="SF result -> response" doc:id="tr-response-0001">
+                    <ee:message>
+                        <ee:set-payload resource="dwl/sf-create-to-response.dwl"/>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus"><![CDATA[201]]></ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+
+                <logger level="INFO" doc:name="Log END" doc:id="log-post-end-0001"
+                        message="#['END create-lead sfLeadId=' ++ (vars.sfLeadId default '') ++ ' correlationId=' ++ (correlationId default '')]"/>
+            </otherwise>
+        </choice>
+        <error-handler ref="reals-sf-leads-api-apiKitErrorHandler"/>
+    </flow>
+
+    <!-- ============================================================ -->
+    <!-- Resource flow - GET /health                                  -->
+    <!-- ============================================================ -->
+    <flow name="get:\health:reals-sf-leads-api-config" doc:id="flow-get-health-0001">
+        <logger level="INFO" doc:name="Log START" doc:id="log-health-start-0001"
+                message="#['START health correlationId=' ++ (correlationId default '')]"/>
+        <ee:transform doc:name="Set UP body" doc:id="tr-health-0001">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ status: "UP" }]]></ee:set-payload>
+            </ee:message>
+            <ee:variables>
+                <ee:set-variable variableName="httpStatus"><![CDATA[200]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+        <logger level="INFO" doc:name="Log END" doc:id="log-health-end-0001"
+                message="#['END health correlationId=' ++ (correlationId default '')]"/>
+        <error-handler ref="reals-sf-leads-api-apiKitErrorHandler"/>
+    </flow>
+
+</mule>

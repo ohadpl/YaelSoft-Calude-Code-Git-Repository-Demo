@@ -1,0 +1,11 @@
+#%RAML 1.0 DataType
+
+type: object
+description: Standard error response body.
+properties:
+  error:
+    type: string
+    description: Error code, e.g. "BAD_REQUEST" or "INTERNAL_ERROR".
+  message:
+    type: string
+    description: Human-readable error description.

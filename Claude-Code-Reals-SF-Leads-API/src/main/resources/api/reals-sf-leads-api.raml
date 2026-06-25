@@ -1,0 +1,63 @@
+#%RAML 1.0
+title: Reals to Salesforce Leads API
+version: v1
+baseUri: /api
+mediaType: application/json
+
+description: |
+  Opens LEADS from the REALS system into Salesforce for Shikun & Binui - Rental Housing.
+  REALS is the API consumer; the API validates an inbound lead (customer contact details plus
+  the property of interest, per business requirements pages 9-10) and creates a standard
+  Salesforce Lead record.
+
+types:
+  Lead:           !include dataTypes/Lead.raml
+  LeadResponse:   !include dataTypes/LeadResponse.raml
+  ErrorResponse:  !include dataTypes/ErrorResponse.raml
+  HealthResponse: !include dataTypes/HealthResponse.raml
+
+/leads:
+  post:
+    description: |
+      Create a Salesforce Lead from a REALS lead. The request carries customer contact
+      details and the property/apartment of interest. On success the standard Salesforce
+      Lead is created and its Id is returned.
+    body:
+      application/json:
+        type: Lead
+        examples:
+          input: !include examples/LeadExample.raml
+    responses:
+      201:
+        description: Lead created in Salesforce.
+        body:
+          application/json:
+            type: LeadResponse
+            examples:
+              output: !include examples/LeadResponseExample.raml
+      400:
+        description: Bad request - payload validation failed.
+        body:
+          application/json:
+            type: ErrorResponse
+            examples:
+              output: !include examples/ErrorResponseExample.raml
+      500:
+        description: Internal error - Salesforce or unexpected failure.
+        body:
+          application/json:
+            type: ErrorResponse
+            examples:
+              output: !include examples/ServerErrorExample.raml
+
+/health:
+  get:
+    description: Lightweight liveness probe. Returns 200 with a static body.
+    responses:
+      200:
+        description: Service is up.
+        body:
+          application/json:
+            type: HealthResponse
+            examples:
+              output: !include examples/HealthResponseExample.raml
