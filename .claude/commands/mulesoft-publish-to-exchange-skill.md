@@ -1,5 +1,5 @@
 ---
-description: Publish a MuleSoft Anypoint Studio application (or connector/API asset) to Anypoint Exchange using the mule-maven-plugin. Also supports publishing non-Mule assets (Python agents, HTTP APIs, external agents) to Exchange via the Exchange REST API. Sets the Exchange-required groupId (Org ID GUID), adds distributionManagement, wires settings.xml credentials, then builds and runs `mvn deploy` for Mule apps; generates and runs a Python registration script for non-Mule assets.
+description: Publish a MuleSoft Anypoint Studio application, an API specification (RAML/OAS), or a non-Mule asset to Anypoint Exchange. Three paths — (1) Mule app via the mule-maven-plugin (`mvn deploy`); (2) non-Mule asset (Python agent, HTTP API) via the Exchange REST API; (3) API specification (RAML/OAS) as a `rest-api` asset via the Exchange REST API multipart upload. Sets the Exchange-required groupId (Org ID GUID), wires credentials, and verifies the published asset. A complete MuleSoft delivery publishes BOTH the API spec (path 3) and the Mule app (path 1).
 argument-hint: [path-to-project] [org-id-guid] [version]
 allowed-tools: [Read, Glob, Grep, Edit, Write, Bash, PowerShell]
 ---
@@ -20,13 +20,15 @@ non-Mule asset (Python agent, external HTTP API, etc.).
 
 ---
 
-## Step 0 — Detect the project type
+## Step 0 — Detect what is being published
 
-Check whether the target path contains a `pom.xml` with `<packaging>mule-application</packaging>` and a
-`src/main/mule/` directory.
+| The target is… | Path |
+|---|---|
+| a `pom.xml` with `<packaging>mule-application</packaging>` + `src/main/mule/` | **PATH 1 — Mule Application** (Steps 1–7) |
+| a Python agent / external HTTP API / spec-less asset | **PATH 2 — Non-Mule Asset** (Steps A–E) |
+| an **API specification** — a RAML/OAS file, a `raml\` folder, a Design Center ZIP, or `src/main/resources/api/*.raml` | **PATH 3 — API Specification** (Steps R1–R3) |
 
-- **Yes** → follow the **Mule Application path** (Steps 1–7 below).
-- **No** → follow the **Non-Mule Asset path** (Steps A–E below).
+> **A full MuleSoft delivery has TWO Exchange assets:** the **API specification** (PATH 3, `type=rest-api`) and the **Mule application** (PATH 1, `type=app`). When publishing a project that has both, run **PATH 3 and PATH 1** — do not stop after the app. They take **different assetIds** (`<name>-spec` vs `<name>`); an assetId is unique per org across all types.
 
 ---
 
@@ -331,3 +333,115 @@ UI (Access Management → Business Groups → Settings tab).
 3. Remind the user that the assets are registered with their current (possibly localhost) URLs. Once the
    services are deployed to production URLs, re-run the script with the `*_URL` env vars set to update
    the Exchange records.
+
+---
+
+# PATH 3 — API Specification (RAML / OAS) → Exchange `rest-api` asset
+
+Publish a RAML/OAS API specification to Exchange as a `rest-api` asset, via the Exchange REST API
+(`POST /exchange/api/v2/assets`, `multipart/form-data`). The `mule-maven-plugin` does NOT publish a spec, and
+PATH 2's `classifier=http` registers a spec-LESS asset — so a real RAML/OAS spec uses this path.
+
+> Use this for the API SPEC half of a delivery; use PATH 1 for the Mule app. Both are required for a
+> complete delivery and use **different assetIds** (`<name>-spec` vs `<name>`).
+
+## Step R1 — Resolve the spec and metadata
+
+1. Locate the spec source: a `raml\` deliverables folder, `src/main/resources/api/`, or a Design Center ZIP.
+   Identify the **main file** (the root `.raml`/`.yaml`, e.g. `reals-sf-leads-api.raml`).
+2. Gather (from `$ARGUMENTS` or ask once): **Org ID GUID** (= groupId), **assetId** (use `<app-assetId>-spec`),
+   **version** (e.g. `1.0.0`), **name**, **apiVersion** (e.g. `v1`), short **description** (≤256 chars).
+3. Connected-app credentials come from `~/.m2/settings.xml` (active profile `anypoint-connected-app`,
+   properties `anypoint.connectedApp.clientId` / `clientSecret`) — never echo the secret.
+
+## Step R2 — Package and publish
+
+The spec ZIP must have the main file at its root (forward-slash entries) and must **not** contain an
+`exchange.json` whose `assetId`/`groupId`/`version` disagree with what you POST — a mismatch yields
+`400 CUSTOM_ASSET_INVALID_ASSET`. Simplest: zip the RAML files **without** any `exchange.json` and let the
+form fields supply all metadata. Run via uv + httpx (same toolchain as PATH 2):
+
+```python
+# publish_api_spec.py  —  uv run --with httpx publish_api_spec.py
+import os, io, zipfile, sys, httpx
+
+BASE   = "https://anypoint.mulesoft.com"
+ORG    = os.environ["ANYPOINT_ORG_ID"]            # Business Group ID GUID (= groupId)
+CID    = os.environ["ANYPOINT_CLIENT_ID"]
+CSEC   = os.environ["ANYPOINT_CLIENT_SECRET"]
+RAMLDIR= os.environ["RAML_DIR"]                   # folder with <main>.raml + dataTypes/ + examples/
+ASSET  = os.environ["ASSET_ID"]                   # e.g. my-api-spec  (must differ from the app assetId)
+VER    = os.environ.get("ASSET_VERSION", "1.0.0")
+NAME   = os.environ["ASSET_NAME"]
+MAIN   = os.environ["MAIN_FILE"]                  # e.g. reals-sf-leads-api.raml
+APIVER = os.environ.get("API_VERSION", "v1")
+DESC   = os.environ.get("ASSET_DESC", NAME)[:256]
+
+# Build the spec zip in memory, excluding exchange.json, forward-slash entries:
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, _, files in os.walk(RAMLDIR):
+        for f in files:
+            if f == "exchange.json":
+                continue
+            full = os.path.join(root, f)
+            rel  = os.path.relpath(full, RAMLDIR).replace("\\", "/")
+            z.write(full, rel)
+buf.seek(0)
+
+tok = httpx.post(f"{BASE}/accounts/api/v2/oauth2/token",
+                 json={"grant_type": "client_credentials", "client_id": CID, "client_secret": CSEC},
+                 timeout=30).json()["access_token"]
+
+# Exchange requires multipart/form-data. classifier=raml for RAML (use "oas" for OpenAPI).
+fields = [
+    ("organizationId", (None, ORG)),
+    ("groupId",        (None, ORG)),
+    ("assetId",        (None, ASSET)),
+    ("version",        (None, VER)),
+    ("name",           (None, NAME)),
+    ("description",    (None, DESC)),
+    ("type",           (None, "rest-api")),
+    ("classifier",     (None, "raml")),
+    ("apiVersion",     (None, APIVER)),
+    ("main",           (None, MAIN)),
+    ("files.raml.zip", (f"{ASSET}.zip", buf.read(), "application/zip")),
+]
+r = httpx.post(f"{BASE}/exchange/api/v2/assets", files=fields,
+               headers={"Authorization": f"Bearer {tok}"}, timeout=60)
+if r.status_code in (200, 201):
+    print(f"PUBLISHED  rest-api {ORG}/{ASSET} v{VER}")
+    print(f"  {BASE}/exchange/{ORG}/{ASSET}/")
+elif r.status_code == 409:
+    print(f"--  {ASSET} v{VER} already exists — bump version to republish")
+else:
+    print(f"FAIL HTTP {r.status_code}: {r.text}"); sys.exit(1)
+```
+
+```powershell
+$env:ANYPOINT_ORG_ID="<ORG_GUID>"; $env:ASSET_ID="<app-assetId>-spec"; $env:ASSET_NAME="<Name>"
+$env:RAML_DIR="<path-to-raml-folder>"; $env:MAIN_FILE="<root>.raml"; $env:ASSET_VERSION="1.0.0"
+# Pull connected-app creds from settings.xml (do not hardcode):
+$m2=Get-Content "$env:USERPROFILE\.m2\settings.xml" -Raw
+$env:ANYPOINT_CLIENT_ID=[regex]::Match($m2,'<anypoint\.connectedApp\.clientId>([^<]+)<').Groups[1].Value
+$env:ANYPOINT_CLIENT_SECRET=[regex]::Match($m2,'<anypoint\.connectedApp\.clientSecret>([^<]+)<').Groups[1].Value
+& "C:\Users\ohadp\.local\bin\uv.exe" run --with httpx "<PROJECT_PATH>\publish_api_spec.py"
+```
+
+> **PowerShell-only alternative** (no Python): `Invoke-RestMethod -Form @{ ...same fields...; "files.raml.zip"=Get-Item $zip }`. In PS7, read 4xx bodies via `$_.ErrorDetails.Message` (not `GetResponseStream`).
+
+## Step R3 — Verify
+
+A complete delivery shows **two** assets — one `rest-api`, one `app`:
+```powershell
+$tok = (Invoke-RestMethod -Method Post -Uri "https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token" -ContentType application/json -Body (@{grant_type='client_credentials';client_id=$env:ANYPOINT_CLIENT_ID;client_secret=$env:ANYPOINT_CLIENT_SECRET}|ConvertTo-Json)).access_token
+(Invoke-RestMethod -Headers @{Authorization="Bearer $tok"} -Uri "https://anypoint.mulesoft.com/exchange/api/v2/assets?organizationId=$env:ANYPOINT_ORG_ID&search=<asset-stub>") | ForEach-Object { "$($_.type)`t$($_.assetId)`tv$($_.version)" }
+```
+
+### PATH 3 common failures
+| Error | Cause | Fix |
+|---|---|---|
+| **400 CUSTOM_ASSET_INVALID_ASSET** ("…assetId should be…") | the zip's `exchange.json` disagrees with the POSTed fields | exclude `exchange.json` from the zip (or make it match) |
+| **400 "Missing mandatory asset field: main"** | RAML/OAS spec uploaded without `main` | add `main=<root-spec-filename>` |
+| **409 Conflict** | asset + version already exists | bump `version` |
+| **same assetId as the app** | assetId is unique per org across types | use a distinct `<name>-spec` assetId |
