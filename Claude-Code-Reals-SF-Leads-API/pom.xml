@@ -3,7 +3,9 @@
 
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>com.shikunbinui.integration</groupId>
+	<!-- groupId set to the Anypoint Org ID GUID (Cloud Applications LTD) — required for Exchange publish.
+	     Original Maven groupId was com.shikunbinui.integration. -->
+	<groupId>190a90f6-e8e7-4652-973e-248a7deae5f6</groupId>
 	<artifactId>claude-code-reals-sf-leads-api</artifactId>
 	<version>1.0.0</version>
 	<packaging>mule-application</packaging>
@@ -48,6 +50,28 @@
 				<artifactId>mule-maven-plugin</artifactId>
 				<version>${mule.maven.plugin.version}</version>
 				<extensions>true</extensions>
+				<configuration>
+					<cloudhub2Deployment>
+						<provider>MC</provider>
+						<environment>${ch2.environment}</environment>
+						<target>${ch2.target}</target>
+						<businessGroupId>${ch2.businessGroupId}</businessGroupId>
+						<applicationName>${ch2.applicationName}</applicationName>
+						<muleVersion>${app.runtime}</muleVersion>
+						<replicas>1</replicas>
+						<vCores>0.1</vCores>
+						<connectedAppClientId>${anypoint.connectedApp.clientId}</connectedAppClientId>
+						<connectedAppClientSecret>${anypoint.connectedApp.clientSecret}</connectedAppClientSecret>
+						<connectedAppGrantType>client_credentials</connectedAppGrantType>
+						<deploymentSettings>
+							<generateDefaultPublicUrl>true</generateDefaultPublicUrl>
+						</deploymentSettings>
+						<properties>
+							<!-- resolves ${secure.key} for the secure-properties module on the CloudHub runtime -->
+							<secure.key>${ch2.secure.key}</secure.key>
+						</properties>
+					</cloudhub2Deployment>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>com.mulesoft.munit.tools</groupId>
@@ -183,5 +207,14 @@
 			<layout>default</layout>
 		</pluginRepository>
 	</pluginRepositories>
+
+	<distributionManagement>
+		<repository>
+			<id>exchange</id>
+			<name>Anypoint Exchange v3</name>
+			<url>https://maven.anypoint.mulesoft.com/api/v3/organizations/190a90f6-e8e7-4652-973e-248a7deae5f6/maven</url>
+			<layout>default</layout>
+		</repository>
+	</distributionManagement>
 
 </project>

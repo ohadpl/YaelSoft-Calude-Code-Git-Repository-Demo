@@ -5,3 +5,18 @@ target/
 .settings/
 *.class
 *.log
+
+# Build artifacts / packaged apps
+*.jar
+
+# Secure key material (never commit real AES keys)
+*.key
+secure.key
+secure-*.key
+
+# Nested duplicate folder (Anypoint Studio artifact)
+Claude-Code-Reals-SF-Leads-API/
+
+# OS
+.DS_Store
+Thumbs.db
