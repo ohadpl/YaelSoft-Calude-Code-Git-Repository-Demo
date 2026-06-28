@@ -7,7 +7,7 @@
 	     Original Maven groupId was com.shikunbinui.integration. -->
 	<groupId>190a90f6-e8e7-4652-973e-248a7deae5f6</groupId>
 	<artifactId>claude-code-reals-sf-leads-api</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.1</version>
 	<packaging>mule-application</packaging>
 
 	<name>Claude-Code-Reals-SF-Leads-API</name>
@@ -19,13 +19,13 @@
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
 
-		<app.runtime>4.6.0</app.runtime>
-		<!-- MUnit executes against a locally available EE runtime distribution.
-		     The 4.6.0 EE distribution BOM is not resolvable in this environment
-		     (entitled MuleSoft EE repo), so tests run on the cached 4.11.x EE
-		     runtime, which is backward compatible with this 4.6.0-targeted app.
-		     The deployable artifact still targets 4.6.0 (app.runtime /
-		     mule-artifact.json minMuleVersion). -->
+		<app.runtime>4.6.6</app.runtime>
+		<!-- Runtime is 4.6.6 (not 4.6.0): the Salesforce connector 11.4.0 requires a
+		     minimum Mule runtime of 4.6.6. Deploying on 4.6.0 caused the CloudHub 2.0
+		     replica to crash-loop ("Artifact Salesforce requires ... 4.6.6"). Bumped to
+		     4.6.6 to satisfy the connector. MUnit still executes against the locally
+		     cached 4.11.x EE runtime (the entitled EE distribution BOM for this exact
+		     patch is not resolvable here), which is backward compatible. -->
 		<munit.runtime.version>4.11.4</munit.runtime.version>
 		<mule.maven.plugin.version>4.9.1</mule.maven.plugin.version>
 		<munit.version>3.7.1</munit.version>

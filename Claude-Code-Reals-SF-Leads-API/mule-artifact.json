@@ -1,6 +1,6 @@
 {
     "requiredProduct": "MULE_EE",
-    "minMuleVersion": "4.6.0",
+    "minMuleVersion": "4.6.6",
     "javaSpecificationVersions": ["17"],
     "secureProperties": [
         "salesforce.password",
